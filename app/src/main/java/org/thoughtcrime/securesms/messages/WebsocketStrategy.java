@@ -2,10 +2,10 @@ package org.thoughtcrime.securesms.messages;
 
 import androidx.annotation.NonNull;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobmanager.JobManager;
 import org.thoughtcrime.securesms.jobs.PushProcessMessageJob;
-import org.thoughtcrime.securesms.logging.Log;
 import org.whispersystems.libsignal.InvalidVersionException;
 import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.signalservice.api.SignalServiceMessagePipe;
@@ -76,8 +76,6 @@ class WebsocketStrategy extends MessageRetrievalStrategy {
           }
         } catch (TimeoutException e) {
           Log.w(TAG, "Websocket timeout." + timeSuffix(startTime));
-        } catch (InvalidVersionException e) {
-          Log.w(TAG, e);
         }
       }
     } finally {

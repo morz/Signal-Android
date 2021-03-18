@@ -28,9 +28,10 @@ import "SignalService.proto";
 import "DecryptedGroups.proto";
 
 message DecryptedGroupV2Context {
-    signalservice.GroupContextV2 context    = 1;
-    DecryptedGroupChange         change     = 2;
-    DecryptedGroup               groupState = 3;
+    signalservice.GroupContextV2 context            = 1;
+    DecryptedGroupChange         change             = 2;
+    DecryptedGroup               groupState         = 3;
+    DecryptedGroup               previousGroupState = 4;
 }
 
 message TemporalAuthCredentialResponse {
@@ -67,4 +68,50 @@ message BodyRangeList {
     }
 
     repeated BodyRange ranges = 1;
+}
+
+message GroupCallUpdateDetails {
+             string eraId                = 1;
+             string startedCallUuid      = 2;
+             int64  startedCallTimestamp = 3;
+    repeated string inCallUuids          = 4;
+             bool   isCallFull           = 5;
+}
+
+message ProfileKeyCredentialColumnData {
+    bytes profileKey           = 1;
+    bytes profileKeyCredential = 2;
+}
+
+message DeviceLastResetTime {
+    message Pair {
+        int32 deviceId      = 1;
+        int64 lastResetTime = 2;
+    }
+
+    repeated Pair resetTime = 1;
+}
+
+message Wallpaper {
+    message SingleColor {
+        int32 color = 1;
+    }
+
+    message LinearGradient {
+                 float rotation  = 1;
+        repeated int32 colors    = 2;
+        repeated float positions = 3;
+    }
+
+    message File {
+        string uri = 1;
+    }
+
+    oneof wallpaper {
+        SingleColor    singleColor    = 1;
+        LinearGradient linearGradient = 2;
+        File           file           = 3;
+    }
+
+    float dimLevelInDarkTheme = 4;
 }

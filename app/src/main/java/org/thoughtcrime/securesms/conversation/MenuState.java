@@ -5,6 +5,7 @@ import androidx.annotation.NonNull;
 import org.thoughtcrime.securesms.database.model.MediaMmsMessageRecord;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord;
+import org.thoughtcrime.securesms.recipients.Recipient;
 
 import java.util.Set;
 
@@ -50,7 +51,8 @@ final class MenuState {
     return copy;
   }
 
-  static MenuState getMenuState(@NonNull Set<MessageRecord> messageRecords,
+  static MenuState getMenuState(@NonNull Recipient conversationRecipient,
+                                @NonNull Set<MessageRecord> messageRecords,
                                 boolean shouldShowMessageRequest)
   {
     
@@ -97,25 +99,27 @@ final class MenuState {
              .shouldShowSaveAttachmentAction(!actionMessage                                              &&
                                              !viewOnce                                                   &&
                                              messageRecord.isMms()                                       &&
+                                             !messageRecord.isMediaPending()                             &&
                                              !messageRecord.isMmsNotification()                          &&
                                              ((MediaMmsMessageRecord)messageRecord).containsMediaSlide() &&
                                              ((MediaMmsMessageRecord)messageRecord).getSlideDeck().getStickerSlide() == null)
-             .shouldShowForwardAction(!actionMessage && !sharedContact && !viewOnce && !remoteDelete)
+             .shouldShowForwardAction(!actionMessage && !sharedContact && !viewOnce && !remoteDelete && !messageRecord.isMediaPending())
              .shouldShowDetailsAction(!actionMessage)
-             .shouldShowReplyAction(canReplyToMessage(actionMessage, messageRecord, shouldShowMessageRequest));
+             .shouldShowReplyAction(canReplyToMessage(conversationRecipient, actionMessage, messageRecord, shouldShowMessageRequest));
     }
 
     return builder.shouldShowCopyAction(!actionMessage && !remoteDelete && hasText)
                   .build();
   }
 
-  static boolean canReplyToMessage(boolean actionMessage, @NonNull MessageRecord messageRecord, boolean isDisplayingMessageRequest) {
-    return !actionMessage                  &&
-           !messageRecord.isRemoteDelete() &&
-           !messageRecord.isPending()      &&
-           !messageRecord.isFailed()       &&
-           !isDisplayingMessageRequest     &&
-           messageRecord.isSecure()        &&
+  static boolean canReplyToMessage(@NonNull Recipient conversationRecipient, boolean actionMessage, @NonNull MessageRecord messageRecord, boolean isDisplayingMessageRequest) {
+    return !actionMessage                                                              &&
+           !messageRecord.isRemoteDelete()                                             &&
+           !messageRecord.isPending()                                                  &&
+           !messageRecord.isFailed()                                                   &&
+           !isDisplayingMessageRequest                                                 &&
+           messageRecord.isSecure()                                                    &&
+           (!conversationRecipient.isGroup() || conversationRecipient.isActiveGroup()) &&
            !messageRecord.getRecipient().isBlocked();
   }
 
@@ -128,7 +132,8 @@ final class MenuState {
            messageRecord.isIdentityUpdate()        ||
            messageRecord.isIdentityVerified()      ||
            messageRecord.isIdentityDefault()       ||
-           messageRecord.isProfileChange();
+           messageRecord.isProfileChange()         ||
+           messageRecord.isFailedDecryptionType();
   }
 
   private final static class Builder {

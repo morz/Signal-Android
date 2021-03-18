@@ -3,14 +3,16 @@ package org.thoughtcrime.securesms.jobmanager;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.annimon.stream.Stream;
 import com.fasterxml.jackson.annotation.JsonProperty;
+
+import org.thoughtcrime.securesms.util.Base64;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class Data {
 
@@ -63,6 +65,11 @@ public class Data {
   public String getString(@NonNull String key) {
     throwIfAbsent(strings, key);
     return strings.get(key);
+  }
+
+  public byte[] getStringAsBlob(@NonNull String key) {
+    throwIfAbsent(strings, key);
+    return Base64.decodeOrThrow(strings.get(key));
   }
 
   public String getStringOrDefault(@NonNull String key, String defaultValue) {
@@ -136,6 +143,19 @@ public class Data {
   public long[] getLongArray(@NonNull String key) {
     throwIfAbsent(longArrays, key);
     return longArrays.get(key);
+  }
+
+  public List<Long> getLongArrayAsList(@NonNull String key) {
+    throwIfAbsent(longArrays, key);
+
+    long[]     array = Objects.requireNonNull(longArrays.get(key));
+    List<Long> longs = new ArrayList<>(array.length);
+
+    for (long l : array) {
+      longs.add(l);
+    }
+
+    return longs;
   }
 
 
@@ -295,6 +315,17 @@ public class Data {
       return this;
     }
 
+    public Builder putLongListAsArray(@NonNull String key, @NonNull List<Long> value) {
+      long[] longs = new long[value.size()];
+
+      for (int i = 0; i < value.size(); i++) {
+        longs[i] = value.get(i);
+      }
+
+      longArrays.put(key, longs);
+      return this;
+    }
+
     public Builder putFloat(@NonNull String key, float value) {
       floats.put(key, value);
       return this;
@@ -322,6 +353,12 @@ public class Data {
 
     public Builder putBooleanArray(@NonNull String key, @NonNull boolean[] value) {
       booleanArrays.put(key, value);
+      return this;
+    }
+
+    public Builder putBlobAsString(@NonNull String key, @NonNull byte[] value) {
+      String serialized = Base64.encodeBytes(value);
+      strings.put(key, serialized);
       return this;
     }
 

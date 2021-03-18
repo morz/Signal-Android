@@ -29,13 +29,15 @@ import android.hardware.Camera.Size;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Build.VERSION;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import android.util.AttributeSet;
-import org.thoughtcrime.securesms.logging.Log;
 import android.view.OrientationEventListener;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import org.signal.core.util.ThreadUtil;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.util.BitmapUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
@@ -319,7 +321,7 @@ public class CameraView extends ViewGroup {
         camera.startPreview();
         Log.i(TAG, "camera.startPreview() -> " + (System.currentTimeMillis() - previewStartMillis) + "ms");
         state = State.ACTIVE;
-        Util.runOnMain(new Runnable() {
+        ThreadUtil.runOnMain(new Runnable() {
           @Override
           public void run() {
             requestLayout();
@@ -494,9 +496,9 @@ public class CameraView extends ViewGroup {
         return;
       }
 
-      Util.runOnMainSync(this::onPreMain);
+      ThreadUtil.runOnMainSync(this::onPreMain);
       final Result result = onRunBackground();
-      Util.runOnMainSync(() -> onPostMain(result));
+      ThreadUtil.runOnMainSync(() -> onPostMain(result));
     }
 
     protected boolean onWait() { return true; }

@@ -12,20 +12,21 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.provider.Settings;
+import android.text.TextUtils;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
-import android.text.TextUtils;
 
 import com.annimon.stream.Collectors;
 import com.annimon.stream.Stream;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.BuildConfig;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.RecipientDatabase;
 import org.thoughtcrime.securesms.database.RecipientDatabase.VibrateState;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.ServiceUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
@@ -43,9 +44,10 @@ public class NotificationChannels {
   private static class Version {
     static final int MESSAGES_CATEGORY   = 2;
     static final int CALLS_PRIORITY_BUMP = 3;
+    static final int VIBRATE_OFF_OTHER   = 4;
   }
 
-  private static final int VERSION = 3;
+  private static final int VERSION = 4;
 
   private static final String CATEGORY_MESSAGES = "messages";
   private static final String CONTACT_PREFIX    = "contact_";
@@ -56,7 +58,8 @@ public class NotificationChannels {
   public static final String APP_UPDATES   = "app_updates";
   public static final String BACKUPS       = "backups_v2";
   public static final String LOCKED_STATUS = "locked_status_v2";
-  public static final String OTHER         = "other_v2";
+  public static final String OTHER         = "other_v3";
+  public static final String VOICE_NOTES   = "voice_notes";
 
   /**
    * Ensures all of the notification channels are created. No harm in repeat calls. Call is safely
@@ -374,6 +377,55 @@ public class NotificationChannels {
   }
 
   /**
+   * Whether or not the default messages notification channel is enabled. Note that "enabled" just
+   * means receiving notifications in some capacity -- a user could have it enabled, but set it to a
+   * lower importance.
+   *
+   * This could also return true if the specific channnel is enabled, but notifications *overall*
+   * are disabled, or the messages category is disabled. Check
+   * {@link #areNotificationsEnabled(Context)} and {@link #isMessagesChannelGroupEnabled(Context)}
+   * to be safe.
+   */
+  public static synchronized boolean isMessageChannelEnabled(@NonNull Context context) {
+    if (!supported()) {
+      return true;
+    }
+
+    NotificationManager notificationManager = ServiceUtil.getNotificationManager(context);
+    NotificationChannel channel             = notificationManager.getNotificationChannel(getMessagesChannel(context));
+
+    return channel != null && channel.getImportance() != NotificationManager.IMPORTANCE_NONE;
+  }
+
+  /**
+   * Whether or not the notification category for messages is enabled. Note that even if it is,
+   * a user could have blocked the specific channel, or notifications overall, and it'd still be
+   * true. See {@link #isMessageChannelEnabled(Context)} and {@link #areNotificationsEnabled(Context)}.
+   */
+  public static synchronized boolean isMessagesChannelGroupEnabled(@NonNull Context context) {
+    if (Build.VERSION.SDK_INT < 28) {
+      return true;
+    }
+
+    NotificationManager      notificationManager = ServiceUtil.getNotificationManager(context);
+    NotificationChannelGroup group               = notificationManager.getNotificationChannelGroup(CATEGORY_MESSAGES);
+
+    return group != null && !group.isBlocked();
+  }
+
+
+  /**
+   * Whether or not notifications for the entire app are enabled.
+   */
+  public static synchronized boolean areNotificationsEnabled(@NonNull Context context) {
+    if (Build.VERSION.SDK_INT >= 24) {
+      return ServiceUtil.getNotificationManager(context).areNotificationsEnabled();
+    } else {
+      return true;
+    }
+  }
+
+  /**
    * Updates the name of an existing channel to match the recipient's current name. Will have no
    * effect if the recipient doesn't have an existing valid channel.
    */
@@ -449,6 +501,7 @@ public class NotificationChannels {
     NotificationChannel backups      = new NotificationChannel(BACKUPS, context.getString(R.string.NotificationChannel_backups), NotificationManager.IMPORTANCE_LOW);
     NotificationChannel lockedStatus = new NotificationChannel(LOCKED_STATUS, context.getString(R.string.NotificationChannel_locked_status), NotificationManager.IMPORTANCE_LOW);
     NotificationChannel other        = new NotificationChannel(OTHER, context.getString(R.string.NotificationChannel_other), NotificationManager.IMPORTANCE_LOW);
+    NotificationChannel voiceNotes   = new NotificationChannel(VOICE_NOTES, context.getString(R.string.NotificationChannel_voice_notes), NotificationManager.IMPORTANCE_LOW);
 
     messages.setGroup(CATEGORY_MESSAGES);
     messages.enableVibration(TextSecurePreferences.isNotificationVibrateEnabled(context));
@@ -459,8 +512,11 @@ public class NotificationChannels {
     backups.setShowBadge(false);
     lockedStatus.setShowBadge(false);
     other.setShowBadge(false);
+    other.setVibrationPattern(new long[]{0});
+    other.enableVibration(true);
+    voiceNotes.setShowBadge(false);
 
-    notificationManager.createNotificationChannels(Arrays.asList(messages, calls, failures, backups, lockedStatus, other));
+    notificationManager.createNotificationChannels(Arrays.asList(messages, calls, failures, backups, lockedStatus, other, voiceNotes));
 
     if (BuildConfig.PLAY_STORE_DISABLED) {
       NotificationChannel appUpdates = new NotificationChannel(APP_UPDATES, context.getString(R.string.NotificationChannel_app_updates), NotificationManager.IMPORTANCE_HIGH);
@@ -484,6 +540,10 @@ public class NotificationChannels {
 
     if (oldVersion < Version.CALLS_PRIORITY_BUMP) {
       notificationManager.deleteNotificationChannel("calls_v2");
+    }
+
+    if (oldVersion < Version.VIBRATE_OFF_OTHER) {
+      notificationManager.deleteNotificationChannel("other_v2");
     }
   }
 

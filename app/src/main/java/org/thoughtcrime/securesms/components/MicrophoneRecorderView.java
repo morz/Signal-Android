@@ -3,9 +3,6 @@ package org.thoughtcrime.securesms.components;
 import android.Manifest;
 import android.content.Context;
 import android.graphics.PorterDuff;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.core.view.ViewCompat;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -19,6 +16,10 @@ import android.view.animation.ScaleAnimation;
 import android.view.animation.TranslateAnimation;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.view.ViewCompat;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.permissions.Permissions;
@@ -54,7 +55,7 @@ public final class MicrophoneRecorderView extends FrameLayout implements View.On
     floatingRecordButton = new FloatingRecordButton(getContext(), findViewById(R.id.quick_audio_fab));
     lockDropTarget       = new LockDropTarget      (getContext(), findViewById(R.id.lock_drop_target));
 
-    View recordButton = ViewUtil.findById(this, R.id.quick_audio_toggle);
+    View recordButton = findViewById(R.id.quick_audio_toggle);
     recordButton.setOnTouchListener(this);
   }
 
@@ -224,8 +225,8 @@ public final class MicrophoneRecorderView extends FrameLayout implements View.On
     }
 
     private float getXOffset(float x) {
-      return ViewCompat.getLayoutDirection(recordButtonFab) == ViewCompat.LAYOUT_DIRECTION_LTR ?
-          -Math.max(0, this.startPositionX - x) : Math.max(0, x - this.startPositionX);
+      return ViewUtil.isLtr(recordButtonFab) ? -Math.max(0, this.startPositionX - x)
+                                             : Math.max(0, x - this.startPositionX);
     }
 
     private float getYOffset(float y) {

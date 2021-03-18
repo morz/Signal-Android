@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import com.annimon.stream.Collectors;
 import com.annimon.stream.Stream;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.database.JobDatabase;
 import org.thoughtcrime.securesms.jobmanager.Job;
 import org.thoughtcrime.securesms.jobmanager.persistence.ConstraintSpec;
@@ -13,11 +14,11 @@ import org.thoughtcrime.securesms.jobmanager.persistence.DependencySpec;
 import org.thoughtcrime.securesms.jobmanager.persistence.FullSpec;
 import org.thoughtcrime.securesms.jobmanager.persistence.JobSpec;
 import org.thoughtcrime.securesms.jobmanager.persistence.JobStorage;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.util.Util;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -27,23 +28,19 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
 
 public class FastJobStorage implements JobStorage {
 
   private static final String TAG = Log.tag(FastJobStorage.class);
 
   private final JobDatabase jobDatabase;
-  private final Executor    serialExecutor;
 
   private final List<JobSpec>                     jobs;
   private final Map<String, List<ConstraintSpec>> constraintsByJobId;
   private final Map<String, List<DependencySpec>> dependenciesByJobId;
 
-  public FastJobStorage(@NonNull JobDatabase jobDatabase, @NonNull Executor serialExecutor) {
+  public FastJobStorage(@NonNull JobDatabase jobDatabase) {
     this.jobDatabase         = jobDatabase;
-    this.serialExecutor      = serialExecutor;
     this.jobs                = new ArrayList<>();
     this.constraintsByJobId  = new HashMap<>();
     this.dependenciesByJobId = new HashMap<>();
@@ -71,25 +68,10 @@ public class FastJobStorage implements JobStorage {
   }
 
   @Override
-  public synchronized void flush() {
-    CountDownLatch latch = new CountDownLatch(1);
-
-    serialExecutor.execute(latch::countDown);
-
-    try {
-      latch.await();
-    } catch (InterruptedException e) {
-      Log.w(TAG, "Interrupted while waiting to flush!", e);
-    }
-  }
-
-  @Override
   public synchronized void insertJobs(@NonNull List<FullSpec> fullSpecs) {
     List<FullSpec> durable = Stream.of(fullSpecs).filterNot(FullSpec::isMemoryOnly).toList();
     if (durable.size() > 0) {
-      serialExecutor.execute(() -> {
-        jobDatabase.insertJobs(durable);
-      });
+      jobDatabase.insertJobs(durable);
     }
 
     for (FullSpec fullSpec : fullSpecs) {
@@ -124,9 +106,25 @@ public class FastJobStorage implements JobStorage {
       return Collections.emptyList();
     } else {
       return Stream.of(jobs)
+                   .groupBy(jobSpec -> {
+                     String queueKey = jobSpec.getQueueKey();
+                     if (queueKey != null) {
+                       return queueKey;
+                     } else {
+                       return jobSpec.getId();
+                     }
+                   })
+                   .map(byQueueKey ->
+                     Stream.of(byQueueKey.getValue()).sorted((j1, j2) -> Long.compare(j1.getCreateTime(), j2.getCreateTime()))
+                           .findFirst()
+                           .orElse(null)
+                   )
+                   .withoutNulls()
+                   .filter(j -> {
+                     List<DependencySpec> dependencies = dependenciesByJobId.get(j.getId());
+                     return dependencies == null || dependencies.isEmpty();
+                   })
                    .filterNot(JobSpec::isRunning)
-                   .filter(this::firstInQueue)
-                   .filter(j -> !dependenciesByJobId.containsKey(j.getId()) || dependenciesByJobId.get(j.getId()).isEmpty())
                    .filter(j -> j.getNextRunAttemptTime() <= currentTime)
                    .sorted((j1, j2) -> Long.compare(j1.getCreateTime(), j2.getCreateTime()))
                    .toList();
@@ -163,19 +161,31 @@ public class FastJobStorage implements JobStorage {
   }
 
   @Override
-  public synchronized int getJobInstanceCount(@NonNull String factoryKey) {
+  public synchronized int getJobCountForFactory(@NonNull String factoryKey) {
     return (int) Stream.of(jobs)
                        .filter(j -> j.getFactoryKey().equals(factoryKey))
                        .count();
   }
 
   @Override
+  public synchronized int getJobCountForFactoryAndQueue(@NonNull String factoryKey, @NonNull String queueKey) {
+    return (int) Stream.of(jobs)
+                       .filter(j -> factoryKey.equals(j.getFactoryKey()) &&
+                                    queueKey.equals(j.getQueueKey()))
+                       .count();
+  }
+
+  @Override
+  public boolean areQueuesEmpty(@NonNull Set<String> queueKeys) {
+    return Stream.of(jobs)
+                 .noneMatch(j -> j.getQueueKey() != null && queueKeys.contains(j.getQueueKey()));
+  }
+
+  @Override
   public synchronized void updateJobRunningState(@NonNull String id, boolean isRunning) {
     JobSpec job = getJobById(id);
     if (job == null || !job.isMemoryOnly()) {
-      serialExecutor.execute(() -> {
-        jobDatabase.updateJobRunningState(id, isRunning);
-      });
+      jobDatabase.updateJobRunningState(id, isRunning);
     }
 
     ListIterator<JobSpec> iter = jobs.listIterator();
@@ -190,9 +200,7 @@ public class FastJobStorage implements JobStorage {
                                       existing.getNextRunAttemptTime(),
                                       existing.getRunAttempt(),
                                       existing.getMaxAttempts(),
-                                      existing.getMaxBackoff(),
                                       existing.getLifespan(),
-                                      existing.getMaxInstances(),
                                       existing.getSerializedData(),
                                       existing.getSerializedInputData(),
                                       isRunning,
@@ -206,9 +214,7 @@ public class FastJobStorage implements JobStorage {
   public synchronized void updateJobAfterRetry(@NonNull String id, boolean isRunning, int runAttempt, long nextRunAttemptTime, @NonNull String serializedData) {
     JobSpec job = getJobById(id);
     if (job == null || !job.isMemoryOnly()) {
-      serialExecutor.execute(() -> {
-        jobDatabase.updateJobAfterRetry(id, isRunning, runAttempt, nextRunAttemptTime, serializedData);
-      });
+      jobDatabase.updateJobAfterRetry(id, isRunning, runAttempt, nextRunAttemptTime, serializedData);
     }
 
     ListIterator<JobSpec> iter = jobs.listIterator();
@@ -223,9 +229,7 @@ public class FastJobStorage implements JobStorage {
                                       nextRunAttemptTime,
                                       runAttempt,
                                       existing.getMaxAttempts(),
-                                      existing.getMaxBackoff(),
                                       existing.getLifespan(),
-                                      existing.getMaxInstances(),
                                       serializedData,
                                       existing.getSerializedInputData(),
                                       isRunning,
@@ -237,9 +241,8 @@ public class FastJobStorage implements JobStorage {
 
   @Override
   public synchronized void updateAllJobsToBePending() {
-    serialExecutor.execute(() -> {
-      jobDatabase.updateAllJobsToBePending();
-    });
+    jobDatabase.updateAllJobsToBePending();
+
     ListIterator<JobSpec> iter = jobs.listIterator();
 
     while (iter.hasNext()) {
@@ -251,9 +254,7 @@ public class FastJobStorage implements JobStorage {
                                      existing.getNextRunAttemptTime(),
                                      existing.getRunAttempt(),
                                      existing.getMaxAttempts(),
-                                     existing.getMaxBackoff(),
                                      existing.getLifespan(),
-                                     existing.getMaxInstances(),
                                      existing.getSerializedData(),
                                      existing.getSerializedInputData(),
                                      false,
@@ -273,9 +274,7 @@ public class FastJobStorage implements JobStorage {
     }
 
     if (durable.size() > 0) {
-      serialExecutor.execute(() -> {
-        jobDatabase.updateJobs(durable);
-      });
+      jobDatabase.updateJobs(durable);
     }
 
     Map<String, JobSpec>  updates = Stream.of(jobSpecs).collect(Collectors.toMap(JobSpec::getId));
@@ -307,9 +306,7 @@ public class FastJobStorage implements JobStorage {
     }
 
     if (durableIds.size() > 0) {
-      serialExecutor.execute(() -> {
-        jobDatabase.deleteJobs(durableIds);
-      });
+      jobDatabase.deleteJobs(durableIds);
     }
 
     Set<String> deleteIds = new HashSet<>(jobIds);

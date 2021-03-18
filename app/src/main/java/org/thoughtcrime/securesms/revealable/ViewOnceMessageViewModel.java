@@ -3,7 +3,6 @@ package org.thoughtcrime.securesms.revealable;
 import android.app.Application;
 import android.database.ContentObserver;
 import android.net.Uri;
-import android.os.Handler;
 
 import androidx.annotation.NonNull;
 import androidx.lifecycle.LiveData;
@@ -11,10 +10,10 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 import androidx.lifecycle.ViewModelProvider;
 
+import org.signal.core.util.ThreadUtil;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.database.DatabaseContentProviders;
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord;
-import org.thoughtcrime.securesms.logging.Log;
-import org.thoughtcrime.securesms.util.Util;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 class ViewOnceMessageViewModel extends ViewModel {
@@ -33,7 +32,7 @@ class ViewOnceMessageViewModel extends ViewModel {
     this.application = application;
     this.repository  = repository;
     this.message     = new MutableLiveData<>();
-    this.observer    = new ContentObserver(new Handler()) {
+    this.observer    = new ContentObserver(null) {
       @Override
       public void onChange(boolean selfChange) {
         repository.getMessage(messageId, optionalMessage -> onMessageRetrieved(optionalMessage));
@@ -60,7 +59,7 @@ class ViewOnceMessageViewModel extends ViewModel {
   }
 
   private void onMessageRetrieved(@NonNull Optional<MmsMessageRecord> optionalMessage) {
-    Util.runOnMain(() -> {
+    ThreadUtil.runOnMain(() -> {
       MmsMessageRecord current  = message.getValue() != null ? message.getValue().orNull() : null;
       MmsMessageRecord proposed = optionalMessage.orNull();
 

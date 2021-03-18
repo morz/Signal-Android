@@ -1,10 +1,11 @@
 package org.thoughtcrime.securesms.components.emoji;
 
+import android.widget.ImageView;
+
 import androidx.annotation.LayoutRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.viewpager.widget.PagerAdapter;
-import android.widget.ImageView;
 
 import org.thoughtcrime.securesms.mms.GlideRequests;
 
@@ -13,6 +14,7 @@ public interface MediaKeyboardProvider {
   /** @return True if the click was handled with provider-specific logic, otherwise false */
   void requestPresentation(@NonNull Presenter presenter, boolean isSoloProvider);
   void setController(@Nullable Controller controller);
+  void setCurrentPosition(int currentPosition);
 
   interface BackspaceObserver {
     void onBackspaceClicked();

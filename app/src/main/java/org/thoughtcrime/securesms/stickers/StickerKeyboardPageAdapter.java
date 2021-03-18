@@ -1,18 +1,20 @@
 package org.thoughtcrime.securesms.stickers;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.Px;
-import androidx.recyclerview.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.Px;
+import androidx.recyclerview.widget.RecyclerView;
+
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.database.model.StickerRecord;
+import org.thoughtcrime.securesms.glide.cache.ApngOptions;
 import org.thoughtcrime.securesms.mms.DecryptableStreamUriLoader.DecryptableUri;
 import org.thoughtcrime.securesms.mms.GlideRequests;
 
@@ -28,13 +30,15 @@ final class StickerKeyboardPageAdapter extends RecyclerView.Adapter<StickerKeybo
   private final GlideRequests       glideRequests;
   private final EventListener       eventListener;
   private final List<StickerRecord> stickers;
+  private final boolean             allowApngAnimation;
 
   private int stickerSize;
 
-  StickerKeyboardPageAdapter(@NonNull GlideRequests glideRequests, @NonNull EventListener eventListener) {
-    this.glideRequests = glideRequests;
-    this.eventListener = eventListener;
-    this.stickers      = new ArrayList<>();
+  StickerKeyboardPageAdapter(@NonNull GlideRequests glideRequests, @NonNull EventListener eventListener, boolean allowApngAnimation) {
+    this.glideRequests      = glideRequests;
+    this.eventListener      = eventListener;
+    this.allowApngAnimation = allowApngAnimation;
+    this.stickers           = new ArrayList<>();
 
     setHasStableIds(true);
   }
@@ -51,7 +55,7 @@ final class StickerKeyboardPageAdapter extends RecyclerView.Adapter<StickerKeybo
 
   @Override
   public void onBindViewHolder(@NonNull StickerKeyboardPageViewHolder viewHolder, int i) {
-    viewHolder.bind(glideRequests, eventListener, stickers.get(i), stickerSize);
+    viewHolder.bind(glideRequests, eventListener, stickers.get(i), stickerSize, allowApngAnimation);
   }
 
   @Override
@@ -92,7 +96,8 @@ final class StickerKeyboardPageAdapter extends RecyclerView.Adapter<StickerKeybo
     public void bind(@NonNull GlideRequests glideRequests,
                      @Nullable EventListener eventListener,
                      @NonNull StickerRecord sticker,
-                     @Px int size)
+                     @Px int size,
+                     boolean allowApngAnimation)
     {
       currentSticker = sticker;
 
@@ -101,6 +106,7 @@ final class StickerKeyboardPageAdapter extends RecyclerView.Adapter<StickerKeybo
       itemView.requestLayout();
 
       glideRequests.load(new DecryptableUri(sticker.getUri()))
+                   .set(ApngOptions.ANIMATE, allowApngAnimation)
                    .transition(DrawableTransitionOptions.withCrossFade())
                    .into(image);
 

@@ -4,15 +4,14 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 public interface JobStorage {
 
   @WorkerThread
   void init();
-
-  @WorkerThread
-  void flush();
 
   @WorkerThread
   void insertJobs(@NonNull List<FullSpec> fullSpecs);
@@ -30,7 +29,13 @@ public interface JobStorage {
   @NonNull List<JobSpec> getJobsInQueue(@NonNull String queue);
 
   @WorkerThread
-  int getJobInstanceCount(@NonNull String factoryKey);
+  int getJobCountForFactory(@NonNull String factoryKey);
+
+  @WorkerThread
+  int getJobCountForFactoryAndQueue(@NonNull String factoryKey, @NonNull String queueKey);
+
+  @WorkerThread
+  boolean areQueuesEmpty(@NonNull Set<String> queueKeys);
 
   @WorkerThread
   void updateJobRunningState(@NonNull String id, boolean isRunning);

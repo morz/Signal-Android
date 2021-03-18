@@ -9,9 +9,9 @@ import android.util.Pair;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import net.sqlcipher.database.SQLiteDatabase;
-
 import org.greenrobot.eventbus.EventBus;
+import org.signal.core.util.StreamUtil;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.crypto.AttachmentSecret;
 import org.thoughtcrime.securesms.crypto.ModernDecryptingPartInputStream;
 import org.thoughtcrime.securesms.crypto.ModernEncryptingPartOutputStream;
@@ -19,12 +19,11 @@ import org.thoughtcrime.securesms.database.helpers.SQLCipherOpenHelper;
 import org.thoughtcrime.securesms.database.model.IncomingSticker;
 import org.thoughtcrime.securesms.database.model.StickerPackRecord;
 import org.thoughtcrime.securesms.database.model.StickerRecord;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.DecryptableStreamUriLoader.DecryptableUri;
 import org.thoughtcrime.securesms.stickers.BlessedPacks;
 import org.thoughtcrime.securesms.stickers.StickerPackInstallEvent;
 import org.thoughtcrime.securesms.util.CursorUtil;
-import org.thoughtcrime.securesms.util.Util;
+import org.thoughtcrime.securesms.util.SqlUtil;
 
 import java.io.Closeable;
 import java.io.File;
@@ -105,6 +104,12 @@ public class StickerDatabase extends Database {
     contentValues.put(FILE_RANDOM, fileInfo.getRandom());
 
     long id = databaseHelper.getWritableDatabase().insert(TABLE_NAME, null, contentValues);
+    if (id == -1) {
+      String   selection = PACK_ID + " = ? AND " + STICKER_ID + " = ? AND " + COVER + " = ?";
+      String[] args      = SqlUtil.buildArgs(sticker.getPackId(), sticker.getStickerId(), (sticker.isCover() ? 1 : 0));
+
+      id = databaseHelper.getWritableDatabase().update(TABLE_NAME, contentValues, selection, args);
+    }
 
     if (id > 0) {
       notifyStickerListeners();
@@ -352,7 +357,7 @@ public class StickerDatabase extends Database {
     File                       partsDirectory = context.getDir(DIRECTORY, Context.MODE_PRIVATE);
     File                       file           = File.createTempFile("sticker", ".mms", partsDirectory);
     Pair<byte[], OutputStream> out            = ModernEncryptingPartOutputStream.createFor(attachmentSecret, file, false);
-    long                       length         = Util.copy(inputStream, out.second);
+    long                       length         = StreamUtil.copy(inputStream, out.second);
 
     return new FileInfo(file, length, out.first);
   }

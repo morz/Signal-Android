@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
@@ -29,7 +30,7 @@ public class MultipleRecipientNotificationBuilder extends AbstractNotificationBu
     setSmallIcon(R.drawable.ic_notification);
     setContentTitle(context.getString(R.string.app_name));
     // TODO [greyson] Navigation
-    setContentIntent(PendingIntent.getActivity(context, 0, new Intent(context, MainActivity.class), 0));
+    setContentIntent(PendingIntent.getActivity(context, 0, MainActivity.clearTop(context), 0));
     setCategory(NotificationCompat.CATEGORY_MESSAGE);
     setGroupSummary(true);
 

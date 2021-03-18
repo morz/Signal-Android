@@ -17,6 +17,7 @@ public final class LogDetectorTest {
 
   private static final TestFile serviceLogStub = java(readResourceAsString("ServiceLogStub.java"));
   private static final TestFile appLogStub     = java(readResourceAsString("AppLogStub.java"));
+  private static final TestFile glideLogStub   = java(readResourceAsString("GlideLogStub.java"));
 
   @Test
   public void androidLogUsed_LogNotSignal_2_args() {
@@ -36,10 +37,10 @@ public final class LogDetectorTest {
                 "    Log.d(\"TAG\", \"msg\");\n" +
                 "    ~~~~~~~~~~~~~~~~~~~\n" +
                 "1 errors, 0 warnings")
-      .expectFixDiffs("Fix for src/foo/Example.java line 5: Replace with org.thoughtcrime.securesms.logging.Log.d(\"TAG\", \"msg\"):\n" +
+      .expectFixDiffs("Fix for src/foo/Example.java line 5: Replace with org.signal.core.util.logging.Log.d(\"TAG\", \"msg\"):\n" +
                         "@@ -5 +5\n" +
                         "-     Log.d(\"TAG\", \"msg\");\n" +
-                        "+     org.thoughtcrime.securesms.logging.Log.d(\"TAG\", \"msg\");");
+                        "+     org.signal.core.util.logging.Log.d(\"TAG\", \"msg\");");
   }
 
   @Test
@@ -60,10 +61,10 @@ public final class LogDetectorTest {
                 "    Log.w(\"TAG\", \"msg\", new Exception());\n" +
                 "    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n" +
                 "1 errors, 0 warnings")
-      .expectFixDiffs("Fix for src/foo/Example.java line 5: Replace with org.thoughtcrime.securesms.logging.Log.w(\"TAG\", \"msg\", new Exception()):\n" +
+      .expectFixDiffs("Fix for src/foo/Example.java line 5: Replace with org.signal.core.util.logging.Log.w(\"TAG\", \"msg\", new Exception()):\n" +
                         "@@ -5 +5\n" +
                         "-     Log.w(\"TAG\", \"msg\", new Exception());\n" +
-                        "+     org.thoughtcrime.securesms.logging.Log.w(\"TAG\", \"msg\", new Exception());");
+                        "+     org.signal.core.util.logging.Log.w(\"TAG\", \"msg\", new Exception());");
   }
 
   @Test
@@ -84,10 +85,10 @@ public final class LogDetectorTest {
                 "    Log.d(\"TAG\", \"msg\");\n" +
                 "    ~~~~~~~~~~~~~~~~~~~\n" +
                 "1 errors, 0 warnings")
-      .expectFixDiffs("Fix for src/foo/Example.java line 5: Replace with org.thoughtcrime.securesms.logging.Log.d(\"TAG\", \"msg\"):\n" +
+      .expectFixDiffs("Fix for src/foo/Example.java line 5: Replace with org.signal.core.util.logging.Log.d(\"TAG\", \"msg\"):\n" +
                         "@@ -5 +5\n" +
                         "-     Log.d(\"TAG\", \"msg\");\n" +
-                        "+     org.thoughtcrime.securesms.logging.Log.d(\"TAG\", \"msg\");");
+                        "+     org.signal.core.util.logging.Log.d(\"TAG\", \"msg\");");
   }
 
   @Test
@@ -108,10 +109,10 @@ public final class LogDetectorTest {
                 "    Log.w(\"TAG\", \"msg\", new Exception());\n" +
                 "    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n" +
                 "1 errors, 0 warnings")
-      .expectFixDiffs("Fix for src/foo/Example.java line 5: Replace with org.thoughtcrime.securesms.logging.Log.w(\"TAG\", \"msg\", new Exception()):\n" +
+      .expectFixDiffs("Fix for src/foo/Example.java line 5: Replace with org.signal.core.util.logging.Log.w(\"TAG\", \"msg\", new Exception()):\n" +
                         "@@ -5 +5\n" +
                         "-     Log.w(\"TAG\", \"msg\", new Exception());\n" +
-                        "+     org.thoughtcrime.securesms.logging.Log.w(\"TAG\", \"msg\", new Exception());");
+                        "+     org.signal.core.util.logging.Log.w(\"TAG\", \"msg\", new Exception());");
   }
 
   @Test
@@ -119,7 +120,7 @@ public final class LogDetectorTest {
     lint()
       .files(appLogStub,
         java("package foo;\n" +
-               "import org.thoughtcrime.securesms.logging.Log;\n" +
+               "import org.signal.core.util.logging.Log;\n" +
                "public class Example {\n" +
                "  private static final String TAG = Log.tag(Example.class);\n" +
                "  public void log() {\n" +
@@ -137,7 +138,7 @@ public final class LogDetectorTest {
     lint()
       .files(appLogStub,
         java("package foo;\n" +
-               "import org.thoughtcrime.securesms.logging.Log;\n" +
+               "import org.signal.core.util.logging.Log;\n" +
                "public class Example {\n" +
                "  public void log() {\n" +
                "    Log.d(\"TAG\", \"msg\");\n" +
@@ -151,6 +152,30 @@ public final class LogDetectorTest {
                 "    ~~~~~~~~~~~~~~~~~~~\n" +
                 "1 errors, 0 warnings")
       .expectFixDiffs("");
+  }
+
+  @Test
+  public void glideLogUsed_LogNotSignal_2_args() {
+    lint()
+      .files(glideLogStub,
+        java("package foo;\n" +
+               "import org.signal.glide.Log;\n" +
+               "public class Example {\n" +
+               "  public void log() {\n" +
+               "    Log.d(\"TAG\", \"msg\");\n" +
+               "  }\n" +
+               "}")
+      )
+      .issues(SignalLogDetector.LOG_NOT_SIGNAL)
+      .run()
+      .expect("src/foo/Example.java:5: Error: Using 'org.signal.glide.Log' instead of a Signal Logger [LogNotSignal]\n" +
+                "    Log.d(\"TAG\", \"msg\");\n" +
+                "    ~~~~~~~~~~~~~~~~~~~\n" +
+                "1 errors, 0 warnings")
+      .expectFixDiffs("Fix for src/foo/Example.java line 5: Replace with org.signal.core.util.logging.Log.d(\"TAG\", \"msg\"):\n" +
+                        "@@ -5 +5\n" +
+                        "-     Log.d(\"TAG\", \"msg\");\n" +
+                        "+     org.signal.core.util.logging.Log.d(\"TAG\", \"msg\");");
   }
 
   private static String readResourceAsString(String resourceName) {

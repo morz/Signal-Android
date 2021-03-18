@@ -12,14 +12,13 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.TextSwitcher;
 
-import androidx.annotation.AttrRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 import androidx.fragment.app.DialogFragment;
 import androidx.lifecycle.ViewModelProviders;
 import androidx.loader.app.LoaderManager;
-import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
@@ -33,7 +32,6 @@ import com.google.android.material.tabs.TabLayoutMediator;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.components.emoji.EmojiKeyboardProvider;
-import org.thoughtcrime.securesms.components.emoji.EmojiPageView;
 import org.thoughtcrime.securesms.components.emoji.EmojiPageViewGridAdapter;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.reactions.ReactionsLoader;
@@ -47,9 +45,14 @@ public final class ReactWithAnyEmojiBottomSheetDialogFragment extends BottomShee
                                                                          EmojiPageViewGridAdapter.VariationSelectorListener
 {
 
+  private static final String REACTION_STORAGE_KEY = "reactions_recent_emoji";
+  private static final String ABOUT_STORAGE_KEY    = EmojiKeyboardProvider.RECENT_STORAGE_KEY;
+
   private static final String ARG_MESSAGE_ID = "arg_message_id";
   private static final String ARG_IS_MMS     = "arg_is_mms";
   private static final String ARG_START_PAGE = "arg_start_page";
+  private static final String ARG_SHADOWS    = "arg_shadows";
+  private static final String ARG_RECENT_KEY = "arg_recent_key";
 
   private ReactWithAnyEmojiViewModel                            viewModel;
   private TextSwitcher                                          categoryLabel;
@@ -67,6 +70,22 @@ public final class ReactWithAnyEmojiBottomSheetDialogFragment extends BottomShee
     args.putLong(ARG_MESSAGE_ID, messageRecord.getId());
     args.putBoolean(ARG_IS_MMS, messageRecord.isMms());
     args.putInt(ARG_START_PAGE, startingPage);
+    args.putBoolean(ARG_SHADOWS, false);
+    args.putString(ARG_RECENT_KEY, REACTION_STORAGE_KEY);
+    fragment.setArguments(args);
+
+    return fragment;
+  }
+
+  public static DialogFragment createForAboutSelection() {
+    DialogFragment fragment = new ReactWithAnyEmojiBottomSheetDialogFragment();
+    Bundle         args     = new Bundle();
+
+    args.putLong(ARG_MESSAGE_ID, -1);
+    args.putBoolean(ARG_IS_MMS, false);
+    args.putInt(ARG_START_PAGE, -1);
+    args.putBoolean(ARG_SHADOWS, true);
+    args.putString(ARG_RECENT_KEY, ABOUT_STORAGE_KEY);
     fragment.setArguments(args);
 
     return fragment;
@@ -81,10 +100,13 @@ public final class ReactWithAnyEmojiBottomSheetDialogFragment extends BottomShee
 
   @Override
   public void onCreate(@Nullable Bundle savedInstanceState) {
+    boolean shadows = requireArguments().getBoolean(ARG_SHADOWS);
     if (ThemeUtil.isDarkTheme(requireContext())) {
-      setStyle(DialogFragment.STYLE_NORMAL, R.style.Theme_Signal_BottomSheetDialog_Fixed_ReactWithAny);
+      setStyle(DialogFragment.STYLE_NORMAL, shadows ? R.style.Theme_Signal_BottomSheetDialog_Fixed_ReactWithAny
+                                                    : R.style.Theme_Signal_BottomSheetDialog_Fixed_ReactWithAny_Shadowless);
     } else {
-      setStyle(DialogFragment.STYLE_NORMAL, R.style.Theme_Signal_Light_BottomSheetDialog_Fixed_ReactWithAny);
+      setStyle(DialogFragment.STYLE_NORMAL, shadows ? R.style.Theme_Signal_Light_BottomSheetDialog_Fixed_ReactWithAny
+                                                    : R.style.Theme_Signal_Light_BottomSheetDialog_Fixed_ReactWithAny_Shadowless);
     }
 
     super.onCreate(savedInstanceState);
@@ -99,7 +121,7 @@ public final class ReactWithAnyEmojiBottomSheetDialogFragment extends BottomShee
                                                                      .build();
     MaterialShapeDrawable dialogBackground     = new MaterialShapeDrawable(shapeAppearanceModel);
 
-    dialogBackground.setTint(ThemeUtil.getThemedColor(requireContext(), R.attr.dialog_background_color));
+    dialogBackground.setTint(ContextCompat.getColor(requireContext(), R.color.signal_background_dialog));
 
     dialog.getBehavior().addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
       @Override
@@ -170,15 +192,18 @@ public final class ReactWithAnyEmojiBottomSheetDialogFragment extends BottomShee
     if (savedInstanceState == null) {
       FrameLayout    container       = requireDialog().findViewById(R.id.container);
       LayoutInflater layoutInflater  = LayoutInflater.from(requireContext());
-      View           statusBarShader = layoutInflater.inflate(R.layout.react_with_any_emoji_status_fade, container, false);
       TabLayout      categoryTabs    = (TabLayout) layoutInflater.inflate(R.layout.react_with_any_emoji_tabs, container, false);
 
-      ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtil.getStatusBarHeight(container));
 
-      statusBarShader.setLayoutParams(params);
-      container.addView(statusBarShader, 0);
+      if (!requireArguments().getBoolean(ARG_SHADOWS)) {
+        View                   statusBarShader = layoutInflater.inflate(R.layout.react_with_any_emoji_status_fade, container, false);
+        ViewGroup.LayoutParams params          = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtil.getStatusBarHeight(container));
+
+        statusBarShader.setLayoutParams(params);
+        container.addView(statusBarShader, 0);
+      }
+
       container.addView(categoryTabs);
-
       ViewCompat.setOnApplyWindowInsetsListener(container, (v, insets) -> insets.consumeSystemWindowInsets());
 
       new TabLayoutMediator(categoryTabs, categoryPager, (tab, position) -> {
@@ -205,7 +230,7 @@ public final class ReactWithAnyEmojiBottomSheetDialogFragment extends BottomShee
 
   private void initializeViewModel() {
     Bundle                             args       = requireArguments();
-    ReactWithAnyEmojiRepository        repository = new ReactWithAnyEmojiRepository(requireContext());
+    ReactWithAnyEmojiRepository        repository = new ReactWithAnyEmojiRepository(requireContext(), args.getString(ARG_RECENT_KEY));
     ReactWithAnyEmojiViewModel.Factory factory    = new ReactWithAnyEmojiViewModel.Factory(reactionsLoader, repository, args.getLong(ARG_MESSAGE_ID), args.getBoolean(ARG_IS_MMS));
 
     viewModel = ViewModelProviders.of(this, factory).get(ReactWithAnyEmojiViewModel.class);
@@ -214,6 +239,7 @@ public final class ReactWithAnyEmojiBottomSheetDialogFragment extends BottomShee
   @Override
   public void onEmojiSelected(String emoji) {
     viewModel.onEmojiSelected(emoji);
+    callback.onReactWithAnyEmojiSelected(emoji);
     dismiss();
   }
 
@@ -241,7 +267,8 @@ public final class ReactWithAnyEmojiBottomSheetDialogFragment extends BottomShee
   }
 
   private int getStartingPage(boolean firstPageHasContent) {
-    return requireArguments().getInt(ARG_START_PAGE, firstPageHasContent ? 0 : 1);
+    int startPage = requireArguments().getInt(ARG_START_PAGE);
+    return startPage >= 0 ? startPage : (firstPageHasContent ? 0 : 1);
   }
 
   private class OnPageChanged extends ViewPager2.OnPageChangeCallback {
@@ -255,5 +282,6 @@ public final class ReactWithAnyEmojiBottomSheetDialogFragment extends BottomShee
   public interface Callback {
     void onReactWithAnyEmojiDialogDismissed();
     void onReactWithAnyEmojiPageChanged(int page);
+    void onReactWithAnyEmojiSelected(@NonNull String emoji);
   }
 }

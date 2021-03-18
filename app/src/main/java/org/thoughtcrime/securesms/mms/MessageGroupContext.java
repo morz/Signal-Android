@@ -22,7 +22,6 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.GroupC
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
@@ -162,6 +161,10 @@ public final class MessageGroupContext {
 
     public @NonNull GroupMasterKey getGroupMasterKey() {
       return groupMasterKey;
+    }
+
+    public @NonNull DecryptedGroupChange getChange() {
+      return decryptedGroupV2Context.getChange();
     }
 
     public @NonNull List<UUID> getAllActivePendingAndRemovedMembers() {

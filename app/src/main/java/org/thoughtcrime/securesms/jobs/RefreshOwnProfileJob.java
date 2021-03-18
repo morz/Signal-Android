@@ -5,6 +5,7 @@ import android.text.TextUtils;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.signal.core.util.logging.Log;
 import org.signal.zkgroup.profiles.ProfileKey;
 import org.signal.zkgroup.profiles.ProfileKeyCredential;
 import org.thoughtcrime.securesms.crypto.ProfileKeyUtil;
@@ -14,11 +15,11 @@ import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobmanager.Data;
 import org.thoughtcrime.securesms.jobmanager.Job;
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.profiles.ProfileName;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.ProfileUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
+import org.thoughtcrime.securesms.util.Util;
 import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.signalservice.api.crypto.InvalidCiphertextException;
 import org.whispersystems.signalservice.api.profiles.ProfileAndCredential;
@@ -43,7 +44,7 @@ public class RefreshOwnProfileJob extends BaseJob {
     this(new Parameters.Builder()
                        .addConstraint(NetworkConstraint.KEY)
                        .setQueue(ProfileUploadJob.QUEUE)
-                       .setMaxInstances(1)
+                       .setMaxInstancesForFactory(1)
                        .setMaxAttempts(10)
                        .build());
   }
@@ -75,6 +76,7 @@ public class RefreshOwnProfileJob extends BaseJob {
     SignalServiceProfile profile              = profileAndCredential.getProfile();
 
     setProfileName(profile.getName());
+    setProfileAbout(profile.getAbout(), profile.getAboutEmoji());
     setProfileAvatar(profile.getAvatar());
     setProfileCapabilities(profile.getCapabilities());
     Optional<ProfileKeyCredential> profileKeyCredential = profileAndCredential.getProfileKeyCredential();
@@ -112,6 +114,21 @@ public class RefreshOwnProfileJob extends BaseJob {
       ProfileName profileName   = ProfileName.fromSerialized(plaintextName);
 
       DatabaseFactory.getRecipientDatabase(context).setProfileName(Recipient.self().getId(), profileName);
+    } catch (InvalidCiphertextException | IOException e) {
+      Log.w(TAG, e);
+    }
+  }
+
+  private void setProfileAbout(@Nullable String encryptedAbout, @Nullable String encryptedEmoji) {
+    try {
+      ProfileKey  profileKey     = ProfileKeyUtil.getSelfProfileKey();
+      String      plaintextAbout = ProfileUtil.decryptName(profileKey, encryptedAbout);
+      String      plaintextEmoji = ProfileUtil.decryptName(profileKey, encryptedEmoji);
+
+      Log.d(TAG, "Saving " + (!Util.isEmpty(plaintextAbout) ? "non-" : "") + "empty about.");
+      Log.d(TAG, "Saving " + (!Util.isEmpty(plaintextEmoji) ? "non-" : "") + "empty emoji.");
+
+      DatabaseFactory.getRecipientDatabase(context).setAbout(Recipient.self().getId(), plaintextAbout, plaintextEmoji);
     } catch (InvalidCiphertextException | IOException e) {
       Log.w(TAG, e);
     }

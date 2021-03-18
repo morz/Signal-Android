@@ -3,15 +3,14 @@ package org.thoughtcrime.securesms.database.helpers;
 
 import android.content.ContentValues;
 import android.content.Context;
-import org.thoughtcrime.securesms.logging.Log;
 
 import net.sqlcipher.database.SQLiteDatabase;
 
+import org.signal.core.util.Conversions;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.database.SessionDatabase;
-import org.thoughtcrime.securesms.util.Conversions;
 import org.whispersystems.libsignal.state.SessionRecord;
 import org.whispersystems.libsignal.state.SessionState;
-import org.whispersystems.libsignal.state.StorageProtos.SessionStructure;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 
 import java.io.File;
@@ -65,8 +64,7 @@ class SessionStoreMigrationHelper {
 
             if (versionMarker == SINGLE_STATE_VERSION) {
               Log.i(TAG, "Migrating single state version: " + sessionFile.getAbsolutePath());
-              SessionStructure sessionStructure = SessionStructure.parseFrom(serialized);
-              SessionState     sessionState     = new SessionState(sessionStructure);
+              SessionState sessionState = new SessionState(serialized);
 
               sessionRecord = new SessionRecord(sessionState);
             } else if (versionMarker >= ARCHIVE_STATES_VERSION) {

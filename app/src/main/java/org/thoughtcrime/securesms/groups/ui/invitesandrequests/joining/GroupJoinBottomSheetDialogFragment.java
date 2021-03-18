@@ -18,23 +18,23 @@ import androidx.lifecycle.ViewModelProviders;
 
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.color.MaterialColor;
 import org.thoughtcrime.securesms.components.AvatarImageView;
 import org.thoughtcrime.securesms.contacts.avatars.FallbackContactPhoto;
 import org.thoughtcrime.securesms.contacts.avatars.ResourceContactPhoto;
-import org.thoughtcrime.securesms.conversation.ConversationActivity;
+import org.thoughtcrime.securesms.conversation.ConversationIntents;
+import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.groups.v2.GroupInviteLinkUrl;
-import org.thoughtcrime.securesms.logging.Log;
+import org.thoughtcrime.securesms.jobs.RetrieveProfileJob;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.BottomSheetUtil;
-import org.thoughtcrime.securesms.util.FeatureFlags;
-import org.thoughtcrime.securesms.util.PlayStoreUtil;
 import org.thoughtcrime.securesms.util.ThemeUtil;
 
 public final class GroupJoinBottomSheetDialogFragment extends BottomSheetDialogFragment {
 
-  private static final String TAG = Log.tag(GroupJoinUpdateRequiredBottomSheetDialogFragment.class);
+  private static final String TAG = Log.tag(GroupJoinBottomSheetDialogFragment.class);
 
   private static final String ARG_GROUP_INVITE_LINK_URL = "group_invite_url";
 
@@ -99,19 +99,12 @@ public final class GroupJoinBottomSheetDialogFragment extends BottomSheetDialogF
       groupDetails.setText(requireContext().getResources().getQuantityString(R.plurals.GroupJoinBottomSheetDialogFragment_group_dot_d_members, details.getGroupMembershipCount(), details.getGroupMembershipCount()));
 
       switch (getGroupJoinStatus()) {
-        case COMING_SOON:
-          groupJoinExplain.setText(R.string.GroupJoinUpdateRequiredBottomSheetDialogFragment_coming_soon);
+        case UPDATE_LINKED_DEVICE_TO_JOIN:
+          groupJoinExplain.setText(R.string.GroupJoinUpdateRequiredBottomSheetDialogFragment_update_linked_device_message);
           groupCancelButton.setText(android.R.string.ok);
           groupJoinButton.setVisibility(View.GONE);
-          break;
-        case UPDATE_TO_JOIN:
-          groupJoinExplain.setText(R.string.GroupJoinUpdateRequiredBottomSheetDialogFragment_update_message);
-          groupJoinButton.setText(R.string.GroupJoinUpdateRequiredBottomSheetDialogFragment_update_signal);
-          groupJoinButton.setOnClickListener(v -> {
-            PlayStoreUtil.openPlayStoreOrOurApkDownloadPage(requireContext());
-            dismiss();
-          });
-          groupJoinButton.setVisibility(View.VISIBLE);
+          ApplicationDependencies.getJobManager()
+                                 .add(RetrieveProfileJob.forRecipient(Recipient.self().getId()));
           break;
         case LOCAL_CAN_JOIN:
           groupJoinExplain.setText(details.joinRequiresAdminApproval() ? R.string.GroupJoinBottomSheetDialogFragment_admin_approval_needed
@@ -143,7 +136,8 @@ public final class GroupJoinBottomSheetDialogFragment extends BottomSheetDialogF
     viewModel.getJoinSuccess().observe(getViewLifecycleOwner(), joinGroupSuccess -> {
         Log.i(TAG, "Group joined, navigating to group");
 
-        Intent intent = ConversationActivity.buildIntent(requireContext(), joinGroupSuccess.getGroupRecipient().getId(), joinGroupSuccess.getGroupThreadId());
+        Intent intent = ConversationIntents.createBuilder(requireContext(), joinGroupSuccess.getGroupRecipient().getId(), joinGroupSuccess.getGroupThreadId())
+                                           .build();
         requireActivity().startActivity(intent);
 
         dismiss();
@@ -151,19 +145,12 @@ public final class GroupJoinBottomSheetDialogFragment extends BottomSheetDialogF
     );
   }
 
-  private static FeatureFlags.GroupJoinStatus getGroupJoinStatus() {
-    FeatureFlags.GroupJoinStatus groupJoinStatus = FeatureFlags.clientLocalGroupJoinStatus();
-
-    if (groupJoinStatus == FeatureFlags.GroupJoinStatus.LOCAL_CAN_JOIN) {
-      if (!FeatureFlags.groupsV2() || Recipient.self().getGroupsV2Capability() == Recipient.Capability.NOT_SUPPORTED) {
-        // TODO [Alan] GV2 additional copy could be presented in these cases
-        return FeatureFlags.GroupJoinStatus.UPDATE_TO_JOIN;
-      }
-      
-      return groupJoinStatus;
+  private static ExtendedGroupJoinStatus getGroupJoinStatus() {
+    if (Recipient.self().getGroupsV2Capability() != Recipient.Capability.SUPPORTED) {
+      return ExtendedGroupJoinStatus.UPDATE_LINKED_DEVICE_TO_JOIN;
+    } else {
+      return ExtendedGroupJoinStatus.LOCAL_CAN_JOIN;
     }
-
-    return groupJoinStatus;
   }
 
   private @NonNull String errorToMessage(@NonNull FetchGroupDetailsError error) {
@@ -184,7 +171,7 @@ public final class GroupJoinBottomSheetDialogFragment extends BottomSheetDialogF
   private GroupInviteLinkUrl getGroupInviteLinkUrl() {
     try {
       //noinspection ConstantConditions
-      return GroupInviteLinkUrl.fromUrl(requireArguments().getString(ARG_GROUP_INVITE_LINK_URL));
+      return GroupInviteLinkUrl.fromUri(requireArguments().getString(ARG_GROUP_INVITE_LINK_URL));
     } catch (GroupInviteLinkUrl.InvalidGroupLinkException | GroupInviteLinkUrl.UnknownGroupLinkVersionException e) {
       throw new AssertionError();
     }
@@ -200,5 +187,13 @@ public final class GroupJoinBottomSheetDialogFragment extends BottomSheetDialogF
     public @NonNull FallbackContactPhoto getPhotoForGroup() {
       return new ResourceContactPhoto(R.drawable.ic_group_outline_48);
     }
+  }
+
+  public enum ExtendedGroupJoinStatus {
+    /** Locally we're using a version that can use group links, but one or more linked devices needs updating for GV2. */
+    UPDATE_LINKED_DEVICE_TO_JOIN,
+
+    /** This version of the client allows joining via GV2 group links. */
+    LOCAL_CAN_JOIN
   }
 }

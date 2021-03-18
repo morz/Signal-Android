@@ -22,8 +22,10 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
-import org.thoughtcrime.securesms.logging.Log;
+
+import org.signal.core.util.logging.Log;
 
 /**
  * This class is used to listen to the accelerometer to monitor the
@@ -140,7 +142,7 @@ public final class AccelerometerListener {
         }
     };
 
-    Handler mHandler = new Handler() {
+    Handler mHandler = new Handler(Looper.getMainLooper()) {
         public void handleMessage(Message msg) {
             switch (msg.what) {
             case ORIENTATION_CHANGED:

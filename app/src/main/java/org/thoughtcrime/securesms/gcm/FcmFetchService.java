@@ -11,13 +11,13 @@ import androidx.annotation.Nullable;
 
 import com.google.firebase.messaging.RemoteMessage;
 
+import org.signal.core.util.concurrent.SignalExecutors;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobs.PushNotificationReceiveJob;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.messages.BackgroundMessageRetriever;
 import org.thoughtcrime.securesms.messages.RestStrategy;
 import org.thoughtcrime.securesms.util.concurrent.SerialMonoLifoExecutor;
-import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -92,7 +92,7 @@ public class FcmFetchService extends Service {
         FcmJobService.schedule(context);
       } else {
         Log.w(TAG, "Failed to retrieve messages. Scheduling on JobManager (API " + Build.VERSION.SDK_INT + ").");
-        ApplicationDependencies.getJobManager().add(new PushNotificationReceiveJob(context));
+        ApplicationDependencies.getJobManager().add(new PushNotificationReceiveJob());
       }
     }
   }

@@ -27,8 +27,6 @@ import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
-import android.os.Handler;
-import android.os.Looper;
 import android.provider.Telephony;
 import android.telephony.TelephonyManager;
 import android.text.Spannable;
@@ -47,21 +45,17 @@ import com.google.i18n.phonenumbers.NumberParseException;
 import com.google.i18n.phonenumbers.PhoneNumberUtil;
 import com.google.i18n.phonenumbers.Phonenumber;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.BuildConfig;
 import org.thoughtcrime.securesms.components.ComposeText;
-import org.thoughtcrime.securesms.logging.Log;
+import org.thoughtcrime.securesms.keyvalue.SignalStore;
 import org.thoughtcrime.securesms.mms.OutgoingLegacyMmsConnection;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.io.ByteArrayOutputStream;
-import java.io.Closeable;
-import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.security.SecureRandom;
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -69,15 +63,12 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class Util {
   private static final String TAG = Util.class.getSimpleName();
 
-  private static volatile Handler handler;
+  private static final long BUILD_LIFESPAN = TimeUnit.DAYS.toMillis(90);
 
   public static <T> List<T> asList(T... elements) {
     List<T> result = new LinkedList<>();
@@ -113,6 +104,18 @@ public class Util {
     return join(boxed, delimeter);
   }
 
+  @SafeVarargs
+  public static @NonNull <E> List<E> join(@NonNull List<E>... lists) {
+    int     totalSize = Stream.of(lists).reduce(0, (sum, list) -> sum + list.size());
+    List<E> joined    = new ArrayList<>(totalSize);
+
+    for (List<E> list : lists) {
+      joined.addAll(list);
+    }
+
+    return joined;
+  }
+
   public static String join(List<Long> list, String delimeter) {
     StringBuilder sb = new StringBuilder();
 
@@ -135,17 +138,6 @@ public class Util {
     }
 
     return out.toString();
-  }
-
-  public static ExecutorService newSingleThreadedLifoExecutor() {
-    ThreadPoolExecutor executor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingLifoQueue<Runnable>());
-
-    executor.execute(() -> {
-//        Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
-      Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
-    });
-
-    return executor;
   }
 
   public static boolean isEmpty(EncodedStringValue[] value) {
@@ -239,79 +231,6 @@ public class Util {
     } catch (InterruptedException ie) {
       throw new AssertionError(ie);
     }
-  }
-
-  public static void close(@Nullable Closeable closeable) {
-    if (closeable == null) return;
-
-    try {
-      closeable.close();
-    } catch (IOException e) {
-      Log.w(TAG, e);
-    }
-  }
-
-  public static long getStreamLength(InputStream in) throws IOException {
-    byte[] buffer    = new byte[4096];
-    int    totalSize = 0;
-
-    int read;
-
-    while ((read = in.read(buffer)) != -1) {
-      totalSize += read;
-    }
-
-    return totalSize;
-  }
-
-  public static void readFully(InputStream in, byte[] buffer) throws IOException {
-    readFully(in, buffer, buffer.length);
-  }
-
-  public static void readFully(InputStream in, byte[] buffer, int len) throws IOException {
-    int offset = 0;
-
-    for (;;) {
-      int read = in.read(buffer, offset, len - offset);
-      if (read == -1) throw new EOFException("Stream ended early");
-
-      if (read + offset < len) offset += read;
-      else                		 return;
-    }
-  }
-
-  public static byte[] readFully(InputStream in) throws IOException {
-    ByteArrayOutputStream bout = new ByteArrayOutputStream();
-    byte[] buffer              = new byte[4096];
-    int read;
-
-    while ((read = in.read(buffer)) != -1) {
-      bout.write(buffer, 0, read);
-    }
-
-    in.close();
-
-    return bout.toByteArray();
-  }
-
-  public static String readFullyAsString(InputStream in) throws IOException {
-    return new String(readFully(in));
-  }
-
-  public static long copy(InputStream in, OutputStream out) throws IOException {
-    byte[] buffer = new byte[8192];
-    int read;
-    long total = 0;
-
-    while ((read = in.read(buffer)) != -1) {
-      out.write(buffer, 0, read);
-      total += read;
-    }
-
-    in.close();
-    out.close();
-
-    return total;
   }
 
   @RequiresPermission(anyOf = {
@@ -458,67 +377,30 @@ public class Util {
     return secret;
   }
 
-  public static int getDaysTillBuildExpiry() {
-    int age = (int) TimeUnit.MILLISECONDS.toDays(System.currentTimeMillis() - BuildConfig.BUILD_TIMESTAMP);
-    return 90 - age;
+  /**
+   * @return The amount of time (in ms) until this build of Signal will be considered 'expired'.
+   *         Takes into account both the build age as well as any remote deprecation values.
+   */
+  public static long getTimeUntilBuildExpiry() {
+    if (SignalStore.misc().isClientDeprecated()) {
+      return 0;
+    }
+
+    long buildAge                   = System.currentTimeMillis() - BuildConfig.BUILD_TIMESTAMP;
+    long timeUntilBuildDeprecation  = BUILD_LIFESPAN - buildAge;
+    long timeUntilRemoteDeprecation = RemoteDeprecation.getTimeUntilDeprecation();
+
+    if (timeUntilRemoteDeprecation != -1) {
+      long timeUntilDeprecation = Math.min(timeUntilBuildDeprecation, timeUntilRemoteDeprecation);
+      return Math.max(timeUntilDeprecation, 0);
+    } else {
+      return Math.max(timeUntilBuildDeprecation, 0);
+    }
   }
 
   @TargetApi(VERSION_CODES.LOLLIPOP)
   public static boolean isMmsCapable(Context context) {
     return (VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) || OutgoingLegacyMmsConnection.isConnectionPossible(context);
-  }
-
-  public static boolean isMainThread() {
-    return Looper.myLooper() == Looper.getMainLooper();
-  }
-
-  public static void assertMainThread() {
-    if (!isMainThread()) {
-      throw new AssertionError("Must run on main thread.");
-    }
-  }
-
-  public static void assertNotMainThread() {
-    if (isMainThread()) {
-      throw new AssertionError("Cannot run on main thread.");
-    }
-  }
-
-  public static void postToMain(final @NonNull Runnable runnable) {
-    getHandler().post(runnable);
-  }
-
-  public static void runOnMain(final @NonNull Runnable runnable) {
-    if (isMainThread()) runnable.run();
-    else                getHandler().post(runnable);
-  }
-
-  public static void runOnMainDelayed(final @NonNull Runnable runnable, long delayMillis) {
-    getHandler().postDelayed(runnable, delayMillis);
-  }
-
-  public static void cancelRunnableOnMain(@NonNull Runnable runnable) {
-    getHandler().removeCallbacks(runnable);
-  }
-
-  public static void runOnMainSync(final @NonNull Runnable runnable) {
-    if (isMainThread()) {
-      runnable.run();
-    } else {
-      final CountDownLatch sync = new CountDownLatch(1);
-      runOnMain(() -> {
-        try {
-          runnable.run();
-        } finally {
-          sync.countDown();
-        }
-      });
-      try {
-        sync.await();
-      } catch (InterruptedException ie) {
-        throw new AssertionError(ie);
-      }
-    }
   }
 
   public static <T> T getRandomElement(T[] elements) {
@@ -594,35 +476,11 @@ public class Util {
   }
 
   public static String getPrettyFileSize(long sizeBytes) {
-    if (sizeBytes <= 0) return "0";
-
-    String[] units       = new String[]{"B", "kB", "MB", "GB", "TB"};
-    int      digitGroups = (int) (Math.log10(sizeBytes) / 3);
-
-    return new DecimalFormat("#,##0.#").format(sizeBytes/Math.pow(1000, digitGroups)) + " " + units[digitGroups];
-  }
-
-  public static void sleep(long millis) {
-    try {
-      Thread.sleep(millis);
-    } catch (InterruptedException e) {
-      throw new AssertionError(e);
-    }
+    return MemoryUnitFormat.formatBytes(sizeBytes);
   }
 
   public static void copyToClipboard(@NonNull Context context, @NonNull String text) {
     ServiceUtil.getClipboardManager(context).setPrimaryClip(ClipData.newPlainText("text", text));
-  }
-
-  private static Handler getHandler() {
-    if (handler == null) {
-      synchronized (Util.class) {
-        if (handler == null) {
-          handler = new Handler(Looper.getMainLooper());
-        }
-      }
-    }
-    return handler;
   }
 
   @SafeVarargs
@@ -642,6 +500,14 @@ public class Util {
       return true;
     } catch (NumberFormatException e) {
       return false;
+    }
+  }
+
+  public static int parseInt(String integer, int defaultValue) {
+    try {
+      return Integer.parseInt(integer);
+    } catch (NumberFormatException e) {
+      return defaultValue;
     }
   }
 

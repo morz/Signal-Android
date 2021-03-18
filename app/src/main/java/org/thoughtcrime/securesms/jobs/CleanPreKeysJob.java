@@ -2,12 +2,11 @@ package org.thoughtcrime.securesms.jobs;
 
 import androidx.annotation.NonNull;
 
+import org.signal.core.util.logging.Log;
+import org.thoughtcrime.securesms.crypto.PreKeyUtil;
 import org.thoughtcrime.securesms.crypto.storage.SignalProtocolStoreImpl;
 import org.thoughtcrime.securesms.jobmanager.Data;
 import org.thoughtcrime.securesms.jobmanager.Job;
-import org.thoughtcrime.securesms.logging.Log;
-
-import org.thoughtcrime.securesms.crypto.PreKeyUtil;
 import org.whispersystems.libsignal.InvalidKeyIdException;
 import org.whispersystems.libsignal.state.SignedPreKeyRecord;
 import org.whispersystems.libsignal.state.SignedPreKeyStore;
@@ -27,7 +26,7 @@ public class CleanPreKeysJob extends BaseJob {
 
   private static final String TAG = CleanPreKeysJob.class.getSimpleName();
 
-  private static final long ARCHIVE_AGE = TimeUnit.DAYS.toMillis(7);
+  private static final long ARCHIVE_AGE = TimeUnit.DAYS.toMillis(30);
 
   public CleanPreKeysJob() {
     this(new Job.Parameters.Builder()

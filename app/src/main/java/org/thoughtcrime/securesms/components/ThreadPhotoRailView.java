@@ -3,16 +3,17 @@ package org.thoughtcrime.securesms.components;
 
 import android.content.Context;
 import android.database.Cursor;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.recyclerview.widget.DefaultItemAnimator;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.DefaultItemAnimator;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.database.CursorRecyclerViewAdapter;
@@ -20,7 +21,6 @@ import org.thoughtcrime.securesms.database.MediaDatabase;
 import org.thoughtcrime.securesms.mms.GlideRequests;
 import org.thoughtcrime.securesms.mms.Slide;
 import org.thoughtcrime.securesms.util.MediaUtil;
-import org.thoughtcrime.securesms.util.ViewUtil;
 
 public class ThreadPhotoRailView extends FrameLayout {
 
@@ -40,7 +40,7 @@ public class ThreadPhotoRailView extends FrameLayout {
 
     inflate(context, R.layout.recipient_preference_photo_rail, this);
 
-    this.recyclerView = ViewUtil.findById(this, R.id.photo_list);
+    this.recyclerView = findViewById(R.id.photo_list);
     this.recyclerView.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false));
     this.recyclerView.setItemAnimator(new DefaultItemAnimator());
     this.recyclerView.setNestedScrollingEnabled(false);
@@ -111,7 +111,7 @@ public class ThreadPhotoRailView extends FrameLayout {
       ThreadPhotoViewHolder(View itemView) {
         super(itemView);
 
-        this.imageView = ViewUtil.findById(itemView, R.id.thumbnail);
+        this.imageView = itemView.findViewById(R.id.thumbnail);
       }
     }
   }

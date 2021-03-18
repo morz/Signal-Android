@@ -2,11 +2,10 @@ package org.thoughtcrime.securesms.keyvalue;
 
 import androidx.annotation.NonNull;
 
-import org.thoughtcrime.securesms.util.FeatureFlags;
-import org.whispersystems.signalservice.api.kbs.MasterKey;
 import org.whispersystems.signalservice.api.storage.StorageKey;
 
-import java.security.SecureRandom;
+import java.util.Collections;
+import java.util.List;
 
 public class StorageServiceValues extends SignalStoreValues {
 
@@ -19,6 +18,11 @@ public class StorageServiceValues extends SignalStoreValues {
 
   @Override
   void onFirstEverAppLaunch() {
+  }
+
+  @Override
+  @NonNull List<String> getKeysToIncludeInBackup() {
+    return Collections.emptyList();
   }
 
   public synchronized StorageKey getOrCreateStorageKey() {

@@ -1,17 +1,21 @@
 package org.thoughtcrime.securesms.groups.ui.creategroup;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.Pair;
 import android.view.MenuItem;
-import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 
 import com.annimon.stream.Stream;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.ContactSelectionActivity;
 import org.thoughtcrime.securesms.ContactSelectionListFragment;
 import org.thoughtcrime.securesms.R;
@@ -20,18 +24,19 @@ import org.thoughtcrime.securesms.contacts.sync.DirectoryHelper;
 import org.thoughtcrime.securesms.database.RecipientDatabase;
 import org.thoughtcrime.securesms.groups.GroupsV2CapabilityChecker;
 import org.thoughtcrime.securesms.groups.ui.creategroup.details.AddGroupDetailsActivity;
-import org.thoughtcrime.securesms.logging.Log;
+import org.thoughtcrime.securesms.keyvalue.SignalStore;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientId;
 import org.thoughtcrime.securesms.util.FeatureFlags;
 import org.thoughtcrime.securesms.util.Stopwatch;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
+import org.thoughtcrime.securesms.util.ViewUtil;
 import org.thoughtcrime.securesms.util.concurrent.SimpleTask;
 import org.thoughtcrime.securesms.util.views.SimpleProgressDialog;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.io.IOException;
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -39,15 +44,15 @@ public class CreateGroupActivity extends ContactSelectionActivity {
 
   private static final String TAG = Log.tag(CreateGroupActivity.class);
 
-  private static final int   MINIMUM_GROUP_SIZE       = 1;
   private static final short REQUEST_CODE_ADD_DETAILS = 17275;
 
-  private View next;
+  private ExtendedFloatingActionButton next;
+  private ValueAnimator                padStart;
+  private ValueAnimator                padEnd;
 
   public static Intent newIntent(@NonNull Context context) {
     Intent intent = new Intent(context, CreateGroupActivity.class);
 
-    intent.putExtra(ContactSelectionListFragment.MULTI_SELECT, true);
     intent.putExtra(ContactSelectionListFragment.REFRESHABLE, false);
     intent.putExtra(ContactSelectionActivity.EXTRA_LAYOUT_RES_ID, R.layout.create_group_activity);
 
@@ -55,8 +60,7 @@ public class CreateGroupActivity extends ContactSelectionActivity {
                                                                   : ContactsCursorLoader.DisplayMode.FLAG_PUSH;
 
     intent.putExtra(ContactSelectionListFragment.DISPLAY_MODE, displayMode);
-    intent.putExtra(ContactSelectionListFragment.TOTAL_CAPACITY, FeatureFlags.groupsV2create() ? FeatureFlags.gv2GroupCapacity() - 1
-                                                                                               : ContactSelectionListFragment.NO_LIMIT);
+    intent.putExtra(ContactSelectionListFragment.SELECTION_LIMITS, FeatureFlags.groupLimits().excludingSelf());
 
     return intent;
   }
@@ -68,8 +72,8 @@ public class CreateGroupActivity extends ContactSelectionActivity {
     getSupportActionBar().setDisplayHomeAsUpEnabled(true);
 
     next = findViewById(R.id.next);
+    extendSkip();
 
-    disableNext();
     next.setOnClickListener(v -> handleNextPressed());
   }
 
@@ -98,7 +102,7 @@ public class CreateGroupActivity extends ContactSelectionActivity {
       getToolbar().clear();
     }
 
-    enableNext();
+    shrinkSkip();
 
     return true;
   }
@@ -109,19 +113,39 @@ public class CreateGroupActivity extends ContactSelectionActivity {
       getToolbar().clear();
     }
 
-    if (contactsFragment.getSelectedContactsCount() < MINIMUM_GROUP_SIZE) {
-      disableNext();
+    if (contactsFragment.getSelectedContactsCount() == 0) {
+      extendSkip();
     }
   }
 
-  private void enableNext() {
-    next.setEnabled(true);
-    next.animate().alpha(1f);
+  private void extendSkip() {
+    next.setIconGravity(MaterialButton.ICON_GRAVITY_END);
+    next.extend();
+    animatePadding(24, 18);
   }
 
-  private void disableNext() {
-    next.setEnabled(false);
-    next.animate().alpha(0.5f);
+  private void shrinkSkip() {
+    next.setIconGravity(MaterialButton.ICON_GRAVITY_START);
+    next.shrink();
+    animatePadding(16, 16);
+  }
+
+  private void animatePadding(int startDp, int endDp) {
+    if (padStart != null) padStart.cancel();
+
+    padStart = ValueAnimator.ofInt(next.getPaddingStart(), ViewUtil.dpToPx(startDp)).setDuration(200);
+    padStart.addUpdateListener(animation -> {
+      ViewUtil.setPaddingStart(next, (Integer) animation.getAnimatedValue());
+    });
+    padStart.start();
+
+    if (padEnd != null) padEnd.cancel();
+
+    padEnd = ValueAnimator.ofInt(next.getPaddingEnd(), ViewUtil.dpToPx(endDp)).setDuration(200);
+    padEnd.addUpdateListener(animation -> {
+      ViewUtil.setPaddingEnd(next, (Integer) animation.getAnimatedValue());
+    });
+    padEnd.start();
   }
 
   private void handleNextPressed() {
@@ -153,9 +177,12 @@ public class CreateGroupActivity extends ContactSelectionActivity {
 
       stopwatch.split("registered");
 
-      if (FeatureFlags.groupsV2create()) {
+      List<Recipient> recipientsAndSelf = new ArrayList<>(resolved);
+      recipientsAndSelf.add(Recipient.self().resolve());
+
+      if (!SignalStore.internalValues().gv2DoNotCreateGv2Groups()) {
         try {
-          GroupsV2CapabilityChecker.refreshCapabilitiesIfNecessary(resolved);
+          GroupsV2CapabilityChecker.refreshCapabilitiesIfNecessary(recipientsAndSelf);
         } catch (IOException e) {
           Log.w(TAG, "Failed to refresh all recipient capabilities.", e);
         }
@@ -165,28 +192,33 @@ public class CreateGroupActivity extends ContactSelectionActivity {
 
       resolved = Recipient.resolvedList(ids);
 
-      if (Stream.of(resolved).anyMatch(r -> r.getGroupsV2Capability() != Recipient.Capability.SUPPORTED) &&
-          Stream.of(resolved).anyMatch(r -> !r.hasE164()))
+      Pair<Boolean, List<RecipientId>> result;
+
+      boolean gv2 = Stream.of(recipientsAndSelf).allMatch(r -> r.getGroupsV2Capability() == Recipient.Capability.SUPPORTED);
+      if (!gv2 && Stream.of(resolved).anyMatch(r -> !r.hasE164()))
       {
         Log.w(TAG, "Invalid GV1 group...");
         ids = Collections.emptyList();
+        result = Pair.create(false, ids);
+      } else {
+        result = Pair.create(true, ids);
       }
 
       stopwatch.split("gv1-check");
 
-      return ids;
-    }, ids -> {
+      return result;
+    }, result -> {
       dismissibleDialog.dismiss();
 
       stopwatch.stop(TAG);
 
-      if (ids.isEmpty()) {
+      if (result.first) {
+        startActivityForResult(AddGroupDetailsActivity.newIntent(this, result.second), REQUEST_CODE_ADD_DETAILS);
+      } else {
         new AlertDialog.Builder(this)
                        .setMessage(R.string.CreateGroupActivity_some_contacts_cannot_be_in_legacy_groups)
                        .setPositiveButton(android.R.string.ok, (d, w) -> d.dismiss())
                        .show();
-      } else {
-        startActivityForResult(AddGroupDetailsActivity.newIntent(this, ids), REQUEST_CODE_ADD_DETAILS);
       }
     });
   }

@@ -4,16 +4,17 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.jobmanager.Data;
 import org.thoughtcrime.securesms.jobmanager.Job;
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
 import org.thoughtcrime.securesms.jobmanager.persistence.ConstraintSpec;
 import org.thoughtcrime.securesms.jobmanager.persistence.FullSpec;
 import org.thoughtcrime.securesms.jobmanager.persistence.JobSpec;
-import org.thoughtcrime.securesms.logging.Log;
 
 import java.util.Collections;
 import java.util.LinkedList;
@@ -64,9 +65,7 @@ final class WorkManagerDatabase extends SQLiteOpenHelper {
                                                          0,
                                                          0,
                                                          Job.Parameters.UNLIMITED,
-                                                         TimeUnit.SECONDS.toMillis(30),
                                                          TimeUnit.DAYS.toMillis(1),
-                                                         Job.Parameters.UNLIMITED,
                                                          dataSerializer.serialize(DataMigrator.convert(data)),
                                                          null,
                                                          false,

@@ -1,17 +1,21 @@
 package org.thoughtcrime.securesms.util.livedata;
 
+import android.os.Handler;
+import android.os.Looper;
+
 import androidx.annotation.NonNull;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MediatorLiveData;
 import androidx.lifecycle.MutableLiveData;
+import androidx.lifecycle.Observer;
+import androidx.lifecycle.Transformations;
 
 import com.annimon.stream.function.Predicate;
 
+import org.signal.core.util.concurrent.SignalExecutors;
 import org.thoughtcrime.securesms.util.concurrent.SerialMonoLifoExecutor;
-import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
 import org.whispersystems.libsignal.util.guava.Function;
 
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -64,9 +68,20 @@ public final class LiveDataUtil {
     MediatorLiveData<B> outputLiveData   = new MediatorLiveData<>();
     Executor            liveDataExecutor = new SerialMonoLifoExecutor(executor);
 
-    outputLiveData.addSource(source, currentValue -> liveDataExecutor.execute(() -> outputLiveData.postValue(backgroundFunction.apply(currentValue))));
+    outputLiveData.addSource(source, currentValue -> {
+      liveDataExecutor.execute(() -> {
+        outputLiveData.postValue(backgroundFunction.apply(currentValue));
+      });
+    });
 
     return outputLiveData;
+  }
+
+  /**
+   * Performs a map operation on the source observable and then only emits the mapped item if it has changed since the previous emission.
+   */
+  public static <A, B> LiveData<B> mapDistinct(@NonNull LiveData<A> source, @NonNull androidx.arch.core.util.Function<A, B> mapFunction) {
+    return Transformations.distinctUntilChanged(Transformations.map(source, mapFunction));
   }
 
   /**
@@ -86,7 +101,7 @@ public final class LiveDataUtil {
    * Merges the supplied live data streams.
    */
   public static <T> LiveData<T> merge(@NonNull List<LiveData<T>> liveDataList) {
-    Set<LiveData<T>> set = new LinkedHashSet<>(liveDataList);
+    Set<LiveData<T>> set = new LinkedHashSet<>(liveDataList.size());
 
     set.addAll(liveDataList);
 
@@ -110,8 +125,109 @@ public final class LiveDataUtil {
     return new MutableLiveData<>(item);
   }
 
+  /**
+   * Emits {@param whileWaiting} until {@param main} starts emitting.
+   */
+  public static @NonNull <T> LiveData<T> until(@NonNull LiveData<T> main,
+                                               @NonNull LiveData<T> whileWaiting)
+  {
+    MediatorLiveData<T> mediatorLiveData = new MediatorLiveData<>();
+
+    mediatorLiveData.addSource(whileWaiting, mediatorLiveData::setValue);
+
+    mediatorLiveData.addSource(main, value -> {
+      mediatorLiveData.removeSource(whileWaiting);
+      mediatorLiveData.setValue(value);
+    });
+
+    return mediatorLiveData;
+  }
+
+  /**
+   * Skip the first {@param skip} emissions before emitting everything else.
+   */
+  public static @NonNull <T> LiveData<T> skip(@NonNull LiveData<T> source, int skip) {
+    return new MediatorLiveData<T>() {
+      int skipsRemaining = skip;
+
+      {
+        addSource(source, value -> {
+          if (skipsRemaining <= 0) {
+            setValue(value);
+          } else {
+            skipsRemaining--;
+          }
+        });
+      }
+    };
+  }
+
+  /**
+   * After {@param delay} ms after observation, emits a single Object, {@param value}.
+   */
+  public static <T> LiveData<T> delay(long delay, T value) {
+    return new MutableLiveData<T>() {
+      boolean emittedValue;
+
+      @Override
+      protected void onActive() {
+        if (emittedValue) return;
+        new Handler(Looper.getMainLooper()).postDelayed(() -> setValue(value), delay);
+        emittedValue = true;
+      }
+    };
+  }
+
+  public static <T> LiveData<T> distinctUntilChanged(@NonNull LiveData<T> source, @NonNull EqualityChecker<T> checker) {
+    final MediatorLiveData<T> outputLiveData = new MediatorLiveData<>();
+    outputLiveData.addSource(source, new Observer<T>() {
+
+      boolean firstChange = true;
+
+      @Override
+      public void onChanged(T nextValue) {
+        T currentValue = outputLiveData.getValue();
+
+        if (currentValue == null && nextValue == null) {
+          return;
+        }
+
+        if (firstChange          ||
+            currentValue == null ||
+            nextValue    == null ||
+            !checker.contentsMatch(currentValue, nextValue))
+        {
+          firstChange = false;
+          outputLiveData.setValue(nextValue);
+        }
+      }
+    });
+
+    return outputLiveData;
+  }
+
+  /**
+   * Observes a source until the predicate is met. The final value matching the predicate is emitted.
+   */
+  public static @NonNull <A> LiveData<A> until(@NonNull LiveData<A> source, @NonNull Predicate<A> predicate) {
+    MediatorLiveData<A> mediator = new MediatorLiveData<>();
+
+    mediator.addSource(source, newValue -> {
+      mediator.setValue(newValue);
+      if (predicate.test(newValue)) {
+        mediator.removeSource(source);
+      }
+    });
+
+    return mediator;
+  }
+
   public interface Combine<A, B, R> {
     @NonNull R apply(@NonNull A a, @NonNull B b);
+  }
+
+  public interface EqualityChecker<T> {
+    boolean contentsMatch(@NonNull T current, @NonNull T next);
   }
 
   private static final class CombineLiveData<A, B, R> extends MediatorLiveData<R> {

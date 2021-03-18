@@ -1,23 +1,19 @@
 package org.thoughtcrime.securesms.jobs;
 
-import android.net.Network;
-
 import androidx.annotation.NonNull;
 
 import com.annimon.stream.Stream;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.crypto.UnidentifiedAccessUtil;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.GroupDatabase;
-import org.thoughtcrime.securesms.database.RecipientDatabase;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobmanager.Data;
 import org.thoughtcrime.securesms.jobmanager.Job;
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientUtil;
-import org.thoughtcrime.securesms.util.FeatureFlags;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.signalservice.api.CancelationException;
@@ -96,6 +92,12 @@ public class TypingSendJob extends BaseJob {
 
     if (recipient.isBlocked()) {
       Log.w(TAG, "Not sending typing indicators to blocked recipients.");
+      return;
+    }
+
+    if (recipient.isSelf()) {
+      Log.w(TAG, "Not sending typing indicators to self.");
+      return;
     }
 
     List<Recipient>  recipients = Collections.singletonList(recipient);
@@ -108,12 +110,18 @@ public class TypingSendJob extends BaseJob {
 
     recipients = RecipientUtil.getEligibleForSending(Stream.of(recipients)
                                                            .map(Recipient::resolve)
+                                                           .filter(r -> !r.isBlocked())
                                                            .toList());
 
     SignalServiceMessageSender             messageSender      = ApplicationDependencies.getSignalServiceMessageSender();
     List<SignalServiceAddress>             addresses          = RecipientUtil.toSignalServiceAddressesFromResolved(context, recipients);
-    List<Optional<UnidentifiedAccessPair>> unidentifiedAccess = Stream.of(recipients).map(r -> UnidentifiedAccessUtil.getAccessFor(context, r)).toList();
+    List<Optional<UnidentifiedAccessPair>> unidentifiedAccess = UnidentifiedAccessUtil.getAccessFor(context, recipients);
     SignalServiceTypingMessage             typingMessage      = new SignalServiceTypingMessage(typing ? Action.STARTED : Action.STOPPED, System.currentTimeMillis(), groupId);
+
+    if (addresses.isEmpty()) {
+      Log.w(TAG, "No one to send typing indicators to");
+      return;
+    }
 
     if (isCanceled()) {
       Log.w(TAG, "Canceled before send!");

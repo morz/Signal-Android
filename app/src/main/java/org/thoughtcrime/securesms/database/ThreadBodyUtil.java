@@ -4,17 +4,15 @@ import android.content.Context;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
-import org.thoughtcrime.securesms.components.emoji.Emoji;
 import org.thoughtcrime.securesms.components.emoji.EmojiStrings;
 import org.thoughtcrime.securesms.contactshare.Contact;
 import org.thoughtcrime.securesms.contactshare.ContactUtil;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.GifSlide;
 import org.thoughtcrime.securesms.mms.Slide;
 import org.thoughtcrime.securesms.mms.StickerSlide;
@@ -69,10 +67,8 @@ public final class ThreadBodyUtil {
     } else if (hasImage) {
       return format(context, record, EmojiStrings.PHOTO, R.string.ThreadRecord_photo);
     } else if (TextUtils.isEmpty(record.getBody())) {
-      Log.w(TAG, "Got a media message without a body of a type we were not able to process. [contains media slide]:" + record.containsMediaSlide());
       return context.getString(R.string.ThreadRecord_media_message);
     } else {
-      Log.w(TAG, "Got a media message with a body of a type we were not able to process. [contains media slide]:" + record.containsMediaSlide());
       return getBody(context, record);
     }
   }

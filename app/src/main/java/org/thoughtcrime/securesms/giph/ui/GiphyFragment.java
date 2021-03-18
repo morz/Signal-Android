@@ -2,6 +2,12 @@ package org.thoughtcrime.securesms.giph.ui;
 
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.loader.app.LoaderManager;
@@ -10,11 +16,6 @@ import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.StaggeredGridLayoutManager;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ProgressBar;
-import android.widget.TextView;
 
 import org.thoughtcrime.securesms.LoggingFragment;
 import org.thoughtcrime.securesms.R;
@@ -43,9 +44,9 @@ public abstract class GiphyFragment extends LoggingFragment implements LoaderMan
   @Override
   public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup viewGroup, Bundle bundle) {
     ViewGroup container = ViewUtil.inflate(inflater, viewGroup, R.layout.giphy_fragment);
-    this.recyclerView    = ViewUtil.findById(container, R.id.giphy_list);
-    this.loadingProgress = ViewUtil.findById(container, R.id.loading_progress);
-    this.noResultsView   = ViewUtil.findById(container, R.id.no_results);
+    this.recyclerView    = container.findViewById(R.id.giphy_list);
+    this.loadingProgress = container.findViewById(R.id.loading_progress);
+    this.noResultsView   = container.findViewById(R.id.no_results);
 
     return container;
   }

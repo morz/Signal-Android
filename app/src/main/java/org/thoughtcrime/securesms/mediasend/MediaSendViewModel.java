@@ -15,10 +15,11 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.annimon.stream.Stream;
 
+import org.signal.core.util.ThreadUtil;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.TransportOption;
 import org.thoughtcrime.securesms.database.ThreadDatabase;
 import org.thoughtcrime.securesms.database.model.Mention;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.MediaConstraints;
 import org.thoughtcrime.securesms.mms.OutgoingMediaMessage;
 import org.thoughtcrime.securesms.mms.OutgoingSecureMediaMessage;
@@ -144,7 +145,7 @@ class MediaSendViewModel extends ViewModel {
     }
 
     repository.getPopulatedMedia(context, newMedia, populatedMedia -> {
-      Util.runOnMain(() -> {
+      ThreadUtil.runOnMain(() -> {
         List<Media> filteredMedia = getFilteredMedia(context, populatedMedia, mediaConstraints);
 
         if (filteredMedia.size() != newMedia.size()) {
@@ -196,7 +197,7 @@ class MediaSendViewModel extends ViewModel {
     selectedMedia.setValue(Collections.singletonList(media));
 
     repository.getPopulatedMedia(context, Collections.singletonList(media), populatedMedia -> {
-      Util.runOnMain(() -> {
+      ThreadUtil.runOnMain(() -> {
         List<Media> filteredMedia = getFilteredMedia(context, populatedMedia, mediaConstraints);
 
         if (filteredMedia.isEmpty()) {
@@ -459,14 +460,12 @@ class MediaSendViewModel extends ViewModel {
       throw new IllegalStateException("Provided recipients to send to, but this is SMS!");
     }
 
-    MutableLiveData<MediaSendActivityResult> result         = new MutableLiveData<>();
-    Runnable                                 dialogRunnable = () -> event.postValue(Event.SHOW_RENDER_PROGRESS);
-    String                                   trimmedBody    = isViewOnce() ? "" : body.toString().trim();
-    List<Media>                              initialMedia   = getSelectedMediaOrDefault();
+    MutableLiveData<MediaSendActivityResult> result          = new MutableLiveData<>();
+    String                                   trimmedBody     = isViewOnce() ? "" : body.toString().trim();
+    List<Media>                              initialMedia    = getSelectedMediaOrDefault();
+    List<Mention>                            trimmedMentions = isViewOnce() ? Collections.emptyList() : mentions;
 
     Preconditions.checkState(initialMedia.size() > 0, "No media to send!");
-
-    Util.runOnMainDelayed(dialogRunnable, 250);
 
     MediaRepository.transformMedia(application, initialMedia, modelsToTransform, (oldToNew) -> {
       List<Media> updatedMedia = new ArrayList<>(oldToNew.values());
@@ -477,7 +476,7 @@ class MediaSendViewModel extends ViewModel {
 
       if (isSms || MessageSender.isLocalSelfSend(application, recipient, isSms)) {
         Log.i(TAG, "SMS or local self-send. Skipping pre-upload.");
-        result.postValue(MediaSendActivityResult.forTraditionalSend(updatedMedia, trimmedBody, transport, isViewOnce(), mentions));
+        result.postValue(MediaSendActivityResult.forTraditionalSend(recipient.getId(), updatedMedia, trimmedBody, transport, isViewOnce(), trimmedMentions));
         return;
       }
 
@@ -494,12 +493,12 @@ class MediaSendViewModel extends ViewModel {
       uploadRepository.updateDisplayOrder(updatedMedia);
       uploadRepository.getPreUploadResults(uploadResults -> {
         if (recipients.size() > 0) {
-          sendMessages(recipients, splitBody, uploadResults, mentions);
+          sendMessages(recipients, splitBody, uploadResults, trimmedMentions);
           uploadRepository.deleteAbandonedAttachments();
+          result.postValue(null);
+        } else {
+          result.postValue(MediaSendActivityResult.forPreUpload(recipient.getId(), uploadResults, splitBody, transport, isViewOnce(), trimmedMentions));
         }
-
-        Util.cancelRunnableOnMain(dialogRunnable);
-        result.postValue(MediaSendActivityResult.forPreUpload(uploadResults, splitBody, transport, isViewOnce(), mentions));
       });
     });
 
@@ -600,7 +599,7 @@ class MediaSendViewModel extends ViewModel {
   }
 
   private boolean viewOnceSupported() {
-    return !isSms && (recipient == null || !recipient.isLocalNumber()) && mediaSupportsRevealableMessage(getSelectedMediaOrDefault());
+    return !isSms && (recipient == null || !recipient.isSelf()) && mediaSupportsRevealableMessage(getSelectedMediaOrDefault());
   }
 
   private boolean mediaSupportsRevealableMessage(@NonNull List<Media> media) {
@@ -656,7 +655,7 @@ class MediaSendViewModel extends ViewModel {
 
       // XXX We must do this to avoid sending out messages to the same recipient with the same
       //     sentTimestamp. If we do this, they'll be considered dupes by the receiver.
-      Util.sleep(5);
+      ThreadUtil.sleep(5);
     }
 
     MessageSender.sendMediaBroadcast(application, messages, preUploadResults);
@@ -675,12 +674,16 @@ class MediaSendViewModel extends ViewModel {
     }
   }
 
+  boolean isSms() {
+    return transport.isSms();
+  }
+
   enum Error {
     ITEM_TOO_LARGE, TOO_MANY_ITEMS, NO_ITEMS, ONLY_ITEM_TOO_LARGE
   }
 
   enum Event {
-    VIEW_ONCE_TOOLTIP, SHOW_RENDER_PROGRESS, HIDE_RENDER_PROGRESS
+    VIEW_ONCE_TOOLTIP
   }
 
   enum Page {

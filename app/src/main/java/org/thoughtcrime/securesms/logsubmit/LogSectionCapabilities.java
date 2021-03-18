@@ -7,7 +7,7 @@ import androidx.annotation.NonNull;
 import org.thoughtcrime.securesms.AppCapabilities;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.whispersystems.signalservice.api.profiles.SignalServiceProfile;
+import org.whispersystems.signalservice.api.account.AccountAttributes;
 
 public final class LogSectionCapabilities implements LogSection {
 
@@ -28,11 +28,14 @@ public final class LogSectionCapabilities implements LogSection {
 
     Recipient self = Recipient.self();
 
-    SignalServiceProfile.Capabilities capabilities = AppCapabilities.getCapabilities(false);
+    AccountAttributes.Capabilities capabilities = AppCapabilities.getCapabilities(false);
 
-    return new StringBuilder().append("Local device UUID : ").append(capabilities.isUuid()).append("\n")
-                              .append("Global UUID       : ").append(self.getUuidCapability()).append("\n")
-                              .append("Local device GV2  : ").append(capabilities.isGv2()).append("\n")
-                              .append("Global GV2        : ").append(self.getGroupsV2Capability()).append("\n");
+    return new StringBuilder().append("-- Local").append("\n")
+                              .append("GV2          : ").append(capabilities.isGv2()).append("\n")
+                              .append("GV1 Migration: ").append(capabilities.isGv1Migration()).append("\n")
+                              .append("\n")
+                              .append("-- Global").append("\n")
+                              .append("GV2          : ").append(self.getGroupsV2Capability()).append("\n")
+                              .append("GV1 Migration: ").append(self.getGroupsV1MigrationCapability()).append("\n");
   }
 }

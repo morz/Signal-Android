@@ -9,15 +9,16 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
+import org.signal.core.util.ThreadUtil;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.jobmanager.impl.DefaultExecutorFactory;
 import org.thoughtcrime.securesms.jobmanager.impl.JsonDataSerializer;
-import org.thoughtcrime.securesms.jobmanager.workmanager.WorkManagerMigrator;
 import org.thoughtcrime.securesms.jobmanager.persistence.JobStorage;
-import org.thoughtcrime.securesms.logging.Log;
+import org.thoughtcrime.securesms.jobmanager.workmanager.WorkManagerMigrator;
 import org.thoughtcrime.securesms.util.Debouncer;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.Util;
-import org.thoughtcrime.securesms.util.concurrent.NonMainThreadExecutor;
+import org.thoughtcrime.securesms.util.concurrent.FilteredExecutor;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.util.ArrayList;
@@ -41,7 +42,7 @@ public class JobManager implements ConstraintObserver.Notifier {
 
   private static final String TAG = JobManager.class.getSimpleName();
 
-  public static final int CURRENT_VERSION = 7;
+  public static final int CURRENT_VERSION = 8;
 
   private final Application   application;
   private final Configuration configuration;
@@ -57,7 +58,7 @@ public class JobManager implements ConstraintObserver.Notifier {
   public JobManager(@NonNull Application application, @NonNull Configuration configuration) {
     this.application   = application;
     this.configuration = configuration;
-    this.executor      = new NonMainThreadExecutor(configuration.getExecutorFactory().newSingleThreadExecutor("signal-JobManager"));
+    this.executor      = new FilteredExecutor(configuration.getExecutorFactory().newSingleThreadExecutor("signal-JobManager"), ThreadUtil::isMainThread);
     this.jobTracker    = configuration.getJobTracker();
     this.jobController = new JobController(application,
                                            configuration.getJobStorage(),
@@ -320,10 +321,7 @@ public class JobManager implements ConstraintObserver.Notifier {
   public void flush() {
     CountDownLatch latch = new CountDownLatch(1);
 
-    runOnExecutor(() -> {
-      jobController.flush();
-      latch.countDown();
-    });
+    runOnExecutor(latch::countDown);
 
     try {
       latch.await();
@@ -331,6 +329,31 @@ public class JobManager implements ConstraintObserver.Notifier {
     } catch (InterruptedException e) {
       Log.w(TAG, "Failed to finish flushing.", e);
     }
+  }
+
+  /**
+   * Can tell you if a queue is empty at the time of invocation. It is worth noting that the state
+   * of the queue could change immediately after this method returns due to a call on some other
+   * thread, and you should take that into consideration when using the result. If you want
+   * something to happen within a queue, the safest course of action will always be to create a
+   * job and place it in that queue.
+   *
+   * @return True if requested queue is empty at the time of invocation, otherwise false.
+   */
+  @WorkerThread
+  public boolean isQueueEmpty(@NonNull String queueKey) {
+    return areQueuesEmpty(Collections.singleton(queueKey));
+  }
+
+  /**
+   * See {@link #isQueueEmpty(String)}
+   *
+   * @return True if *all* requested queues are empty at the time of invocation, otherwise false.
+   */
+  @WorkerThread
+  public boolean areQueuesEmpty(@NonNull Set<String> queueKeys) {
+    waitUntilInitialized();
+    return jobController.areQueuesEmpty(queueKeys);
   }
 
   /**

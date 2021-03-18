@@ -6,26 +6,23 @@ import android.app.job.JobParameters;
 import android.app.job.JobScheduler;
 import android.app.job.JobService;
 import android.content.ComponentName;
-import android.content.Context;
-import android.content.SharedPreferences;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 
-import org.thoughtcrime.securesms.ApplicationContext;
+import com.annimon.stream.Collectors;
+import com.annimon.stream.Stream;
+
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
-import org.thoughtcrime.securesms.logging.Log;
 
 import java.util.List;
+import java.util.Locale;
 
 @RequiresApi(26)
-public class JobSchedulerScheduler implements Scheduler {
+public final class JobSchedulerScheduler implements Scheduler {
 
-  private static final String TAG = JobSchedulerScheduler.class.getSimpleName();
-
-  private static final String PREF_NAME    = "JobSchedulerScheduler_prefs";
-  private static final String PREF_NEXT_ID = "pref_next_id";
-
-  private static final int MAX_ID = 20;
+  private static final String TAG = Log.tag(JobSchedulerScheduler.class);
 
   private final Application application;
 
@@ -36,7 +33,24 @@ public class JobSchedulerScheduler implements Scheduler {
   @RequiresApi(26)
   @Override
   public void schedule(long delay, @NonNull List<Constraint> constraints) {
-    JobInfo.Builder jobInfoBuilder = new JobInfo.Builder(getNextId(), new ComponentName(application, SystemService.class))
+    JobScheduler jobScheduler = application.getSystemService(JobScheduler.class);
+
+    String constraintNames = constraints.isEmpty() ? ""
+                                                   : Stream.of(constraints)
+                                                           .map(Constraint::getJobSchedulerKeyPart)
+                                                           .withoutNulls()
+                                                           .sorted()
+                                                           .collect(Collectors.joining("-"));
+
+    int jobId = constraintNames.hashCode();
+
+    if (jobScheduler.getPendingJob(jobId) != null) {
+      return;
+    }
+
+    Log.i(TAG, String.format(Locale.US, "JobScheduler enqueue of %s (%d)", constraintNames, jobId));
+
+    JobInfo.Builder jobInfoBuilder = new JobInfo.Builder(jobId, new ComponentName(application, SystemService.class))
                                                 .setMinimumLatency(delay)
                                                 .setPersisted(true);
 
@@ -44,19 +58,7 @@ public class JobSchedulerScheduler implements Scheduler {
       constraint.applyToJobInfo(jobInfoBuilder);
     }
 
-    Log.i(TAG, "Scheduling a run in " + delay + " ms.");
-    JobScheduler jobScheduler = application.getSystemService(JobScheduler.class);
     jobScheduler.schedule(jobInfoBuilder.build());
-  }
-
-  private int getNextId() {
-    SharedPreferences prefs      = application.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-    int               returnedId = prefs.getInt(PREF_NEXT_ID, 0);
-    int               nextId     = returnedId + 1 > MAX_ID ? 0 : returnedId + 1;
-
-    prefs.edit().putInt(PREF_NEXT_ID, nextId).apply();
-
-    return returnedId;
   }
 
   @RequiresApi(api = 26)
@@ -64,16 +66,15 @@ public class JobSchedulerScheduler implements Scheduler {
 
     @Override
     public boolean onStartJob(JobParameters params) {
-      Log.d(TAG, "onStartJob()");
-
       JobManager jobManager = ApplicationDependencies.getJobManager();
+
+      Log.i(TAG, "Waking due to job: " + params.getJobId());
 
       jobManager.addOnEmptyQueueListener(new JobManager.EmptyQueueListener() {
         @Override
         public void onQueueEmpty() {
           jobManager.removeOnEmptyQueueListener(this);
           jobFinished(params, false);
-          Log.d(TAG, "jobFinished()");
         }
       });
 
@@ -84,7 +85,6 @@ public class JobSchedulerScheduler implements Scheduler {
 
     @Override
     public boolean onStopJob(JobParameters params) {
-      Log.d(TAG, "onStopJob()");
       return false;
     }
   }

@@ -11,6 +11,8 @@ import androidx.annotation.WorkerThread;
 import com.annimon.stream.Collectors;
 import com.annimon.stream.Stream;
 
+import org.signal.core.util.concurrent.SignalExecutors;
+import org.signal.core.util.logging.Log;
 import org.signal.zkgroup.profiles.ProfileKey;
 import org.signal.zkgroup.profiles.ProfileKeyCredential;
 import org.thoughtcrime.securesms.crypto.ProfileKeyUtil;
@@ -24,18 +26,18 @@ import org.thoughtcrime.securesms.jobmanager.Job;
 import org.thoughtcrime.securesms.jobmanager.JobManager;
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
 import org.thoughtcrime.securesms.keyvalue.SignalStore;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.profiles.ProfileName;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientId;
+import org.thoughtcrime.securesms.recipients.RecipientUtil;
 import org.thoughtcrime.securesms.transport.RetryLaterException;
 import org.thoughtcrime.securesms.util.Base64;
 import org.thoughtcrime.securesms.util.IdentityUtil;
 import org.thoughtcrime.securesms.util.ProfileUtil;
 import org.thoughtcrime.securesms.util.SetUtil;
 import org.thoughtcrime.securesms.util.Stopwatch;
+import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.Util;
-import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
 import org.whispersystems.libsignal.IdentityKey;
 import org.whispersystems.libsignal.InvalidKeyException;
 import org.whispersystems.libsignal.util.Pair;
@@ -54,7 +56,9 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -110,7 +114,7 @@ public class RetrieveProfileJob extends BaseJob {
   public static @NonNull Job forRecipient(@NonNull RecipientId recipientId) {
     Recipient recipient = Recipient.resolved(recipientId);
 
-    if (recipient.isLocalNumber()) {
+    if (recipient.isSelf()) {
       return new RefreshOwnProfileJob();
     } else if (recipient.isGroup()) {
       Context         context    = ApplicationDependencies.getApplication();
@@ -136,7 +140,7 @@ public class RetrieveProfileJob extends BaseJob {
     for (RecipientId recipientId : recipientIds) {
       Recipient recipient = Recipient.resolved(recipientId);
 
-      if (recipient.isLocalNumber()) {
+      if (recipient.isSelf()) {
         includeSelf = true;
       } else if (recipient.isGroup()) {
         List<Recipient> recipients = DatabaseFactory.getGroupDatabase(context).getGroupMembers(recipient.requireGroupId(), GroupDatabase.MemberSet.FULL_MEMBERS_EXCLUDING_SELF);
@@ -164,6 +168,14 @@ public class RetrieveProfileJob extends BaseJob {
    * certain time period.
    */
   public static void enqueueRoutineFetchIfNecessary(Application application) {
+    if (!SignalStore.registrationValues().isRegistrationComplete() ||
+        !TextSecurePreferences.isPushRegistered(application)       ||
+        TextSecurePreferences.getLocalUuid(application) == null)
+    {
+      Log.i(TAG, "Registration not complete. Skipping.");
+      return;
+    }
+
     long timeSinceRefresh = System.currentTimeMillis() - SignalStore.misc().getLastProfileRefreshTime();
     if (timeSinceRefresh < TimeUnit.HOURS.toMillis(12)) {
       Log.i(TAG, "Too soon to refresh. Did the last refresh " + timeSinceRefresh + " ms ago.");
@@ -177,6 +189,8 @@ public class RetrieveProfileJob extends BaseJob {
       List<RecipientId> ids = db.getRecipientsForRoutineProfileFetch(current - TimeUnit.DAYS.toMillis(30),
                                                                      current - TimeUnit.DAYS.toMillis(1),
                                                                      50);
+
+      ids.add(Recipient.self().getId());
 
       if (ids.size() > 0) {
         Log.i(TAG, "Optimistically refreshing " + ids.size() + " eligible recipient(s).");
@@ -217,12 +231,23 @@ public class RetrieveProfileJob extends BaseJob {
   }
 
   @Override
-  public void onRun() throws IOException, RetryLaterException {
-    Stopwatch        stopwatch = new Stopwatch("RetrieveProfile");
-    Set<RecipientId> retries   = new HashSet<>();
+  protected boolean shouldTrace() {
+    return true;
+  }
 
-    List<Recipient> recipients = Stream.of(recipientIds).map(Recipient::resolved).toList();
-    stopwatch.split("resolve");
+  @Override
+  public void onRun() throws IOException, RetryLaterException {
+    Stopwatch         stopwatch         = new Stopwatch("RetrieveProfile");
+    RecipientDatabase recipientDatabase = DatabaseFactory.getRecipientDatabase(context);
+    Set<RecipientId>  retries           = new HashSet<>();
+    Set<RecipientId>  unregistered      = new HashSet<>();
+
+    RecipientUtil.ensureUuidsAreAvailable(context, Stream.of(Recipient.resolvedList(recipientIds))
+                                                         .filter(r -> r.getRegistered() != RecipientDatabase.RegisteredState.NOT_REGISTERED)
+                                                         .toList());
+
+    List<Recipient> recipients = Recipient.resolvedList(recipientIds);
+    stopwatch.split("resolve-ensure");
 
     List<Pair<Recipient, ListenableFuture<ProfileAndCredential>>> futures = Stream.of(recipients)
                                                                                   .filter(Recipient::hasServiceIdentifier)
@@ -235,7 +260,7 @@ public class RetrieveProfileJob extends BaseJob {
                                                                    Recipient recipient = pair.first();
 
                                                                    try {
-                                                                     ProfileAndCredential profile = pair.second().get(5, TimeUnit.SECONDS);
+                                                                     ProfileAndCredential profile = pair.second().get(10, TimeUnit.SECONDS);
                                                                      return new Pair<>(recipient, profile);
                                                                    } catch (InterruptedException | TimeoutException e) {
                                                                      retries.add(recipient.getId());
@@ -244,6 +269,9 @@ public class RetrieveProfileJob extends BaseJob {
                                                                        retries.add(recipient.getId());
                                                                      } else if (e.getCause() instanceof NotFoundException) {
                                                                        Log.w(TAG, "Failed to find a profile for " + recipient.getId());
+                                                                       if (recipient.isRegistered()) {
+                                                                         unregistered.add(recipient.getId());
+                                                                       }
                                                                      } else {
                                                                        Log.w(TAG, "Failed to retrieve profile for " + recipient.getId());
                                                                      }
@@ -259,7 +287,18 @@ public class RetrieveProfileJob extends BaseJob {
     }
 
     Set<RecipientId> success = SetUtil.difference(recipientIds, retries);
-    DatabaseFactory.getRecipientDatabase(context).markProfilesFetched(success, System.currentTimeMillis());
+    recipientDatabase.markProfilesFetched(success, System.currentTimeMillis());
+
+    Map<RecipientId, String> newlyRegistered = Stream.of(profiles)
+                                                     .map(Pair::first)
+                                                     .filterNot(Recipient::isRegistered)
+                                                     .collect(Collectors.toMap(Recipient::getId,
+                                                              r -> r.getUuid().transform(UUID::toString).orNull()));
+
+    if (unregistered.size() > 0 || newlyRegistered.size() > 0) {
+      Log.i(TAG, "Marking " + newlyRegistered.size() + " users as registered and " + unregistered.size() + " users as unregistered.");
+      recipientDatabase.bulkUpdatedRegisteredStatus(newlyRegistered, unregistered);
+    }
 
     stopwatch.split("process");
 
@@ -289,6 +328,7 @@ public class RetrieveProfileJob extends BaseJob {
     ProfileKey           recipientProfileKey  = ProfileKeyUtil.profileKeyOrNull(recipient.getProfileKey());
 
     setProfileName(recipient, profile.getName());
+    setProfileAbout(recipient, profile.getAbout(), profile.getAboutEmoji());
     setProfileAvatar(recipient, profile.getAvatar());
     clearUsername(recipient);
     setProfileCapabilities(recipient, profile.getCapabilities());
@@ -393,7 +433,7 @@ public class RetrieveProfileJob extends BaseJob {
 
         if (!recipient.isBlocked()      &&
             !recipient.isGroup()        &&
-            !recipient.isLocalNumber()  &&
+            !recipient.isSelf()         &&
             !localDisplayName.isEmpty() &&
             !remoteDisplayName.equals(localDisplayName))
         {
@@ -401,7 +441,7 @@ public class RetrieveProfileJob extends BaseJob {
           DatabaseFactory.getSmsDatabase(context).insertProfileNameChangeMessages(recipient, remoteDisplayName, localDisplayName);
         } else {
           Log.i(TAG, String.format(Locale.US, "Name changed, but wasn't relevant to write an event. blocked: %s, group: %s, self: %s, firstSet: %s, displayChange: %s",
-                                               recipient.isBlocked(), recipient.isGroup(), recipient.isLocalNumber(), localDisplayName.isEmpty(), !remoteDisplayName.equals(localDisplayName)));
+                                               recipient.isBlocked(), recipient.isGroup(), recipient.isSelf(), localDisplayName.isEmpty(), !remoteDisplayName.equals(localDisplayName)));
         }
       }
 
@@ -411,6 +451,20 @@ public class RetrieveProfileJob extends BaseJob {
     } catch (InvalidCiphertextException e) {
       Log.w(TAG, "Bad profile key for " + recipient.getId());
     } catch (IOException e) {
+      Log.w(TAG, e);
+    }
+  }
+
+  private void setProfileAbout(@NonNull Recipient recipient, @Nullable String encryptedAbout, @Nullable String encryptedEmoji) {
+    try {
+      ProfileKey profileKey = ProfileKeyUtil.profileKeyOrNull(recipient.getProfileKey());
+      if (profileKey == null) return;
+
+      String plaintextAbout = ProfileUtil.decryptName(profileKey, encryptedAbout);
+      String plaintextEmoji = ProfileUtil.decryptName(profileKey, encryptedEmoji);
+
+      DatabaseFactory.getRecipientDatabase(context).setAbout(recipient.getId(), plaintextAbout, plaintextEmoji);
+    } catch (InvalidCiphertextException | IOException e) {
       Log.w(TAG, e);
     }
   }

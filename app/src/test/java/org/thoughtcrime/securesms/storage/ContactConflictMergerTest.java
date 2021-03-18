@@ -1,7 +1,7 @@
 package org.thoughtcrime.securesms.storage;
 
 import org.junit.Test;
-import org.thoughtcrime.securesms.logging.Log;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.storage.StorageSyncHelper.KeyGenerator;
 import org.whispersystems.libsignal.util.guava.Optional;
@@ -44,7 +44,7 @@ public class ContactConflictMergerTest {
   }
 
   @Test
-  public void merge_alwaysPreferRemote_exceptProfileSharingIsEitherOr() {
+  public void merge_alwaysPreferRemote() {
     SignalContactRecord remote = new SignalContactRecord.Builder(byteArray(1), new SignalServiceAddress(UUID_A, E164_A))
                                                         .setBlocked(true)
                                                         .setIdentityKey(byteArray(2))
@@ -55,6 +55,7 @@ public class ContactConflictMergerTest {
                                                         .setUsername("username A")
                                                         .setProfileSharingEnabled(false)
                                                         .setArchived(false)
+                                                        .setForcedUnread(false)
                                                         .build();
     SignalContactRecord local  = new SignalContactRecord.Builder(byteArray(2), new SignalServiceAddress(UUID_B, E164_B))
                                                         .setBlocked(false)
@@ -66,6 +67,7 @@ public class ContactConflictMergerTest {
                                                         .setUsername("username B")
                                                         .setProfileSharingEnabled(true)
                                                         .setArchived(true)
+                                                        .setForcedUnread(true)
                                                         .build();
 
     SignalContactRecord merged = new ContactConflictMerger(Collections.singletonList(local), SELF).merge(remote, local, mock(KeyGenerator.class));
@@ -79,8 +81,9 @@ public class ContactConflictMergerTest {
     assertEquals("AFirst", merged.getGivenName().get());
     assertEquals("ALast", merged.getFamilyName().get());
     assertEquals("username A", merged.getUsername().get());
-    assertTrue(merged.isProfileSharingEnabled());
+    assertFalse(merged.isProfileSharingEnabled());
     assertFalse(merged.isArchived());
+    assertFalse(merged.isForcedUnread());
   }
 
   @Test
@@ -148,6 +151,16 @@ public class ContactConflictMergerTest {
   }
 
   @Test
+  public void getInvalidEntries_nothingInvalid() {
+    SignalContactRecord a    = new SignalContactRecord.Builder(byteArray(1), new SignalServiceAddress(UUID_A, E164_A)).build();
+    SignalContactRecord b    = new SignalContactRecord.Builder(byteArray(2), new SignalServiceAddress(UUID_B, E164_B)).build();
+
+    Collection<SignalContactRecord> invalid = new ContactConflictMerger(Collections.emptyList(), SELF).getInvalidEntries(setOf(a, b));
+
+    assertContentsEqual(setOf(), invalid);
+  }
+
+  @Test
   public void getInvalidEntries_selfIsInvalid() {
     SignalContactRecord a    = new SignalContactRecord.Builder(byteArray(1), new SignalServiceAddress(UUID_A, E164_A)).build();
     SignalContactRecord b    = new SignalContactRecord.Builder(byteArray(2), new SignalServiceAddress(UUID_B, E164_B)).build();
@@ -156,5 +169,18 @@ public class ContactConflictMergerTest {
     Collection<SignalContactRecord> invalid = new ContactConflictMerger(Collections.emptyList(), SELF).getInvalidEntries(setOf(a, b, self));
 
     assertContentsEqual(setOf(self), invalid);
+  }
+
+  @Test
+  public void getInvalidEntries_duplicatesInvalid() {
+    SignalContactRecord aLocal   = new SignalContactRecord.Builder(byteArray(1), new SignalServiceAddress(UUID_A, E164_A)).build();
+    SignalContactRecord bRemote  = new SignalContactRecord.Builder(byteArray(2), new SignalServiceAddress(UUID_B, E164_B)).build();
+    SignalContactRecord aRemote1 = new SignalContactRecord.Builder(byteArray(3), new SignalServiceAddress(UUID_A, null)).build();
+    SignalContactRecord aRemote2 = new SignalContactRecord.Builder(byteArray(4), new SignalServiceAddress(null,   E164_A)).build();
+    SignalContactRecord aRemote3 = new SignalContactRecord.Builder(byteArray(5), new SignalServiceAddress(UUID_A, E164_A)).build();
+
+    Collection<SignalContactRecord> invalid = new ContactConflictMerger(Collections.singleton(aLocal), SELF).getInvalidEntries(setOf(aRemote1, aRemote2, aRemote3, bRemote));
+
+    assertContentsEqual(setOf(aRemote1, aRemote2, aRemote3), invalid);
   }
 }

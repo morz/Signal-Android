@@ -5,15 +5,16 @@ import android.content.Context;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.os.AsyncTask;
-import androidx.annotation.NonNull;
-import org.thoughtcrime.securesms.logging.Log;
 
+import androidx.annotation.NonNull;
+
+import org.signal.core.util.ThreadUtil;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.components.emoji.EmojiPageModel;
-import org.thoughtcrime.securesms.mms.GlideApp;
 import org.thoughtcrime.securesms.util.ListenableFutureTask;
 import org.thoughtcrime.securesms.util.Stopwatch;
 import org.thoughtcrime.securesms.util.Util;
+import org.thoughtcrime.securesms.util.concurrent.SimpleTask;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -39,7 +40,7 @@ public class EmojiPageBitmap {
 
   @SuppressLint("StaticFieldLeak")
   public ListenableFutureTask<Bitmap> get() {
-    Util.assertMainThread();
+    ThreadUtil.assertMainThread();
 
     if (bitmapReference != null && bitmapReference.get() != null) {
       return new ListenableFutureTask<>(bitmapReference.get());
@@ -56,16 +57,11 @@ public class EmojiPageBitmap {
         return null;
       };
       task = new ListenableFutureTask<>(callable);
-      new AsyncTask<Void, Void, Void>() {
-        @Override protected Void doInBackground(Void... params) {
-          task.run();
-          return null;
-        }
-
-        @Override protected void onPostExecute(Void aVoid) {
-          task = null;
-        }
-      }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+      SimpleTask.run(() -> {
+                       task.run();
+                       return null;
+                     },
+                     unused -> task = null);
     }
     return task;
   }

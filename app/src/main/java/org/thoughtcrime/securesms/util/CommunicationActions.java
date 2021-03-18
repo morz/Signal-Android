@@ -20,22 +20,23 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.core.app.TaskStackBuilder;
 import androidx.fragment.app.FragmentActivity;
 
+import org.signal.core.util.concurrent.SignalExecutors;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.WebRtcCallActivity;
-import org.thoughtcrime.securesms.conversation.ConversationActivity;
+import org.thoughtcrime.securesms.conversation.ConversationIntents;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.GroupDatabase;
 import org.thoughtcrime.securesms.groups.GroupId;
 import org.thoughtcrime.securesms.groups.ui.invitesandrequests.joining.GroupJoinBottomSheetDialogFragment;
 import org.thoughtcrime.securesms.groups.ui.invitesandrequests.joining.GroupJoinUpdateRequiredBottomSheetDialogFragment;
 import org.thoughtcrime.securesms.groups.v2.GroupInviteLinkUrl;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.permissions.Permissions;
+import org.thoughtcrime.securesms.proxy.ProxyBottomSheetFragment;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.ringrtc.RemotePeer;
 import org.thoughtcrime.securesms.service.WebRtcCallService;
 import org.thoughtcrime.securesms.sms.MessageSender;
-import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
 import org.thoughtcrime.securesms.util.concurrent.SimpleTask;
 import org.whispersystems.signalservice.api.messages.calls.OfferMessage;
 
@@ -81,16 +82,7 @@ public class CommunicationActions {
     WebRtcCallService.isCallActive(activity, new ResultReceiver(new Handler(Looper.getMainLooper())) {
       @Override
       protected void onReceiveResult(int resultCode, Bundle resultData) {
-        if (resultCode == 1) {
-          startCallInternal(activity, recipient, false);
-        } else {
-          new AlertDialog.Builder(activity)
-                         .setMessage(R.string.CommunicationActions_start_video_call)
-                         .setPositiveButton(R.string.CommunicationActions_call, (d, w) -> startCallInternal(activity, recipient, true))
-                         .setNegativeButton(R.string.CommunicationActions_cancel, (d, w) -> d.dismiss())
-                         .setCancelable(true)
-                         .show();
-        }
+        startCallInternal(activity, recipient, resultCode != 1);
       }
     });
   }
@@ -112,12 +104,12 @@ public class CommunicationActions {
 
       @Override
       protected void onPostExecute(Long threadId) {
-        Intent intent = ConversationActivity.buildIntent(context, recipient.getId(), threadId);
-
+        ConversationIntents.Builder builder = ConversationIntents.createBuilder(context, recipient.getId(), threadId);
         if (!TextUtils.isEmpty(text)) {
-          intent.putExtra(ConversationActivity.TEXT_EXTRA, text);
+          builder.withDraftText(text);
         }
 
+        Intent intent = builder.build();
         if (backStack != null) {
           backStack.addNextIntent(intent);
           backStack.startActivities();
@@ -164,7 +156,7 @@ public class CommunicationActions {
     intent.putExtra(Intent.EXTRA_SUBJECT, Util.emptyIfNull(subject));
     intent.putExtra(Intent.EXTRA_TEXT, Util.emptyIfNull(body));
 
-    context.startActivity(intent);
+    context.startActivity(Intent.createChooser(intent, context.getString(R.string.CommunicationActions_send_email)));
   }
 
   /**
@@ -174,7 +166,7 @@ public class CommunicationActions {
    */
   public static boolean handlePotentialGroupLinkUrl(@NonNull FragmentActivity activity, @NonNull String potentialGroupLinkUrl) {
     try {
-      GroupInviteLinkUrl groupInviteLinkUrl = GroupInviteLinkUrl.fromUrl(potentialGroupLinkUrl);
+      GroupInviteLinkUrl groupInviteLinkUrl = GroupInviteLinkUrl.fromUri(potentialGroupLinkUrl);
 
       if (groupInviteLinkUrl == null) {
         return false;
@@ -214,6 +206,21 @@ public class CommunicationActions {
         GroupJoinBottomSheetDialogFragment.show(activity.getSupportFragmentManager(), groupInviteLinkUrl);
       }
     });
+  }
+
+  /**
+   * If the url is a proxy link it will handle it.
+   * Otherwise returns false, indicating was not a proxy link.
+   */
+  public static boolean handlePotentialProxyLinkUrl(@NonNull FragmentActivity activity, @NonNull String potentialProxyLinkUrl) {
+    String proxy = SignalProxyUtil.parseHostFromProxyDeepLink(potentialProxyLinkUrl);
+
+    if (proxy != null) {
+      ProxyBottomSheetFragment.showForProxy(activity.getSupportFragmentManager(), proxy);
+      return true;
+    } else {
+      return false;
+    }
   }
 
   private static void startInsecureCallInternal(@NonNull Activity activity, @NonNull Recipient recipient) {
@@ -268,12 +275,10 @@ public class CommunicationActions {
                .withPermanentDenialDialog(activity.getString(R.string.ConversationActivity_signal_needs_the_microphone_and_camera_permissions_in_order_to_call_s, recipient.getDisplayName(activity)))
                .onAllGranted(() -> {
                  Intent intent = new Intent(activity, WebRtcCallService.class);
-                 intent.setAction(WebRtcCallService.ACTION_OUTGOING_CALL)
+                 intent.setAction(WebRtcCallService.ACTION_PRE_JOIN_CALL)
                        .putExtra(WebRtcCallService.EXTRA_REMOTE_PEER, new RemotePeer(recipient.getId()))
                        .putExtra(WebRtcCallService.EXTRA_OFFER_TYPE, OfferMessage.Type.VIDEO_CALL.getCode());
                  activity.startService(intent);
-
-                 MessageSender.onMessageSent();
 
                  Intent activityIntent = new Intent(activity, WebRtcCallActivity.class);
 

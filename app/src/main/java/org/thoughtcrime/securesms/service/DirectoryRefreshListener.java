@@ -4,16 +4,14 @@ package org.thoughtcrime.securesms.service;
 import android.content.Context;
 import android.content.Intent;
 
-import org.thoughtcrime.securesms.ApplicationContext;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobs.DirectoryRefreshJob;
+import org.thoughtcrime.securesms.util.FeatureFlags;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 
 import java.util.concurrent.TimeUnit;
 
 public class DirectoryRefreshListener extends PersistentAlarmManagerListener {
-
-  private static final long INTERVAL = TimeUnit.HOURS.toMillis(6);
 
   @Override
   protected long getNextScheduledExecutionTime(Context context) {
@@ -26,7 +24,9 @@ public class DirectoryRefreshListener extends PersistentAlarmManagerListener {
       ApplicationDependencies.getJobManager().add(new DirectoryRefreshJob(true));
     }
 
-    long newTime = System.currentTimeMillis() + INTERVAL;
+    long interval = TimeUnit.SECONDS.toMillis(FeatureFlags.cdsRefreshIntervalSeconds());
+    long newTime  = System.currentTimeMillis() + interval;
+
     TextSecurePreferences.setDirectoryRefreshTime(context, newTime);
 
     return newTime;

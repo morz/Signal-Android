@@ -1,15 +1,16 @@
 package org.thoughtcrime.securesms.longmessage;
 
 import android.app.Application;
+import android.database.ContentObserver;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
+
+import androidx.annotation.NonNull;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 import androidx.lifecycle.ViewModelProvider;
-
-import android.database.ContentObserver;
-import android.net.Uri;
-import android.os.Handler;
-import androidx.annotation.NonNull;
 
 import org.thoughtcrime.securesms.database.DatabaseContentProviders;
 import org.whispersystems.libsignal.util.guava.Optional;
@@ -30,7 +31,7 @@ class LongMessageViewModel extends ViewModel {
     this.messageId       = messageId;
     this.isMms           = isMms;
     this.message         = new MutableLiveData<>();
-    this.messageObserver = new MessageObserver(new Handler());
+    this.messageObserver = new MessageObserver(new Handler(Looper.getMainLooper()));
 
     repository.getMessage(application, messageId, isMms, longMessage -> {
       if (longMessage.isPresent()) {

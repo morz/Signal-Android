@@ -3,7 +3,6 @@ package org.thoughtcrime.securesms.messagedetails;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.ColorDrawable;
-import android.os.Build;
 import android.os.Bundle;
 import android.view.MenuItem;
 
@@ -23,6 +22,7 @@ import org.thoughtcrime.securesms.mms.GlideRequests;
 import org.thoughtcrime.securesms.recipients.RecipientId;
 import org.thoughtcrime.securesms.util.DynamicDarkActionBarTheme;
 import org.thoughtcrime.securesms.util.DynamicTheme;
+import org.thoughtcrime.securesms.util.WindowUtil;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -39,7 +39,7 @@ public final class MessageDetailsActivity extends PassphraseRequiredActivity {
   private MessageDetailsViewModel viewModel;
   private MessageDetailsAdapter   adapter;
 
-  private DynamicTheme dynamicTheme = new DynamicDarkActionBarTheme();
+  private DynamicTheme dynamicTheme = new DynamicTheme();
 
   public static @NonNull Intent getIntentForMessageDetails(@NonNull Context context, @NonNull MessageRecord message, @NonNull RecipientId recipientId, long threadId) {
     Intent intent = new Intent(context, MessageDetailsActivity.class);
@@ -91,7 +91,7 @@ public final class MessageDetailsActivity extends PassphraseRequiredActivity {
 
   private void initializeList() {
     RecyclerView list = findViewById(R.id.message_details_list);
-    adapter           = new MessageDetailsAdapter(glideRequests);
+    adapter           = new MessageDetailsAdapter(this, glideRequests);
 
     list.setAdapter(adapter);
     list.setItemAnimator(null);
@@ -114,19 +114,8 @@ public final class MessageDetailsActivity extends PassphraseRequiredActivity {
   }
 
   private void initializeActionBar() {
-    assert getSupportActionBar() != null;
-    getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-
-    viewModel.getRecipientColor().observe(this, this::setActionBarColor);
-  }
-
-  private void setActionBarColor(MaterialColor color) {
-    assert getSupportActionBar() != null;
-    getSupportActionBar().setBackgroundDrawable(new ColorDrawable(color.toActionBarColor(this)));
-
-    if (Build.VERSION.SDK_INT >= 21) {
-      getWindow().setStatusBarColor(color.toStatusBarColor(this));
-    }
+    requireSupportActionBar().setDisplayHomeAsUpEnabled(true);
+    requireSupportActionBar().setTitle(R.string.AndroidManifest__message_details);
   }
 
   private List<MessageDetailsViewState<?>> convertToRows(MessageDetails details) {

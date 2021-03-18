@@ -19,6 +19,8 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 
+import org.signal.core.util.concurrent.SignalExecutors;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.imageeditor.Bounds;
@@ -30,7 +32,6 @@ import org.thoughtcrime.securesms.imageeditor.model.EditorModel;
 import org.thoughtcrime.securesms.imageeditor.renderers.FaceBlurRenderer;
 import org.thoughtcrime.securesms.imageeditor.renderers.MultiLineTextRenderer;
 import org.thoughtcrime.securesms.keyvalue.SignalStore;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mediasend.MediaSendPageFragment;
 import org.thoughtcrime.securesms.mms.MediaConstraints;
 import org.thoughtcrime.securesms.mms.PushMediaConstraints;
@@ -40,8 +41,8 @@ import org.thoughtcrime.securesms.scribbles.widget.VerticalSlideColorPicker;
 import org.thoughtcrime.securesms.util.MediaUtil;
 import org.thoughtcrime.securesms.util.ParcelUtil;
 import org.thoughtcrime.securesms.util.SaveAttachmentTask;
+import org.thoughtcrime.securesms.util.StorageUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
 import org.thoughtcrime.securesms.util.concurrent.SimpleTask;
 import org.thoughtcrime.securesms.util.views.SimpleProgressDialog;
 import org.whispersystems.libsignal.util.Pair;
@@ -374,7 +375,7 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
       if (mainImage.getRenderer() != null) {
         Bitmap bitmap = ((UriGlideRenderer) mainImage.getRenderer()).getBitmap();
         if (bitmap != null) {
-          FaceDetector detector = new FirebaseFaceDetector();
+          FaceDetector detector = new AndroidFaceDetector();
 
           Point size = model.getOutputSizeMaxWidth(1000);
           Bitmap render = model.render(ApplicationDependencies.getApplication(), size);
@@ -412,29 +413,17 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
   @Override
   public void onSave() {
     SaveAttachmentTask.showWarningDialog(requireContext(), (dialogInterface, i) -> {
+      if (StorageUtil.canWriteToMediaStore()) {
+        performSaveToDisk();
+        return;
+      }
+
       Permissions.with(this)
-                 .request(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE)
+                 .request(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                  .ifNecessary()
                  .withPermanentDenialDialog(getString(R.string.MediaPreviewActivity_signal_needs_the_storage_permission_in_order_to_write_to_external_storage_but_it_has_been_permanently_denied))
                  .onAnyDenied(() -> Toast.makeText(requireContext(), R.string.MediaPreviewActivity_unable_to_write_to_external_storage_without_permission, Toast.LENGTH_LONG).show())
-                 .onAllGranted(() -> {
-                   SimpleTask.run(() -> {
-                     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                     Bitmap                image        = imageEditorView.getModel().render(requireContext());
-
-                     image.compress(Bitmap.CompressFormat.JPEG, 80, outputStream);
-
-                     return BlobProvider.getInstance()
-                                        .forData(outputStream.toByteArray())
-                                        .withMimeType(MediaUtil.IMAGE_JPEG)
-                                        .createForSingleUseInMemory();
-
-                   }, uri -> {
-                     SaveAttachmentTask saveTask = new SaveAttachmentTask(requireContext());
-                     SaveAttachmentTask.Attachment attachment = new SaveAttachmentTask.Attachment(uri, MediaUtil.IMAGE_JPEG, System.currentTimeMillis(), null);
-                     saveTask.executeOnExecutor(SignalExecutors.BOUNDED, attachment);
-                   });
-                 })
+                 .onAllGranted(this::performSaveToDisk)
                  .execute();
     });
   }
@@ -469,6 +458,25 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
     controller.onDoneEditing();
   }
 
+  private void performSaveToDisk() {
+    SimpleTask.run(() -> {
+      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+      Bitmap                image        = imageEditorView.getModel().render(requireContext());
+
+      image.compress(Bitmap.CompressFormat.JPEG, 80, outputStream);
+
+      return BlobProvider.getInstance()
+                         .forData(outputStream.toByteArray())
+                         .withMimeType(MediaUtil.IMAGE_JPEG)
+                         .createForSingleUseInMemory();
+
+    }, uri -> {
+      SaveAttachmentTask            saveTask   = new SaveAttachmentTask(requireContext());
+      SaveAttachmentTask.Attachment attachment = new SaveAttachmentTask.Attachment(uri, MediaUtil.IMAGE_JPEG, System.currentTimeMillis(), null);
+      saveTask.executeOnExecutor(SignalExecutors.BOUNDED, attachment);
+    });
+  }
+
   private void refreshUniqueColors() {
     imageEditorHud.setColorPalette(imageEditorView.getModel().getUniqueColorsIgnoringAlpha());
   }
@@ -478,7 +486,7 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
   }
 
   private void renderFaceBlurs(@NonNull FaceDetectionResult result) {
-    List<RectF> faces = result.rects;
+    List<FaceDetector.Face> faces = result.faces;
 
     if (faces.isEmpty()) {
       cachedFaceDetection = null;
@@ -489,12 +497,12 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
 
     Matrix faceMatrix = new Matrix();
 
-    for (RectF face : faces) {
-      FaceBlurRenderer faceBlurRenderer = new FaceBlurRenderer();
+    for (FaceDetector.Face face : faces) {
+      Renderer         faceBlurRenderer = new FaceBlurRenderer();
       EditorElement    element          = new EditorElement(faceBlurRenderer, EditorModel.Z_MASK);
       Matrix           localMatrix      = element.getLocalMatrix();
 
-      faceMatrix.setRectToRect(Bounds.FULL_BOUNDS, face, Matrix.ScaleToFit.FILL);
+      faceMatrix.setRectToRect(Bounds.FULL_BOUNDS, face.getBounds(), Matrix.ScaleToFit.FILL);
 
       localMatrix.set(result.position);
       localMatrix.preConcat(faceMatrix);
@@ -566,11 +574,11 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
   }
 
   private static class FaceDetectionResult {
-    private final List<RectF> rects;
-    private final Matrix      position;
+    private final List<FaceDetector.Face> faces;
+    private final Matrix                  position;
 
-    private FaceDetectionResult(@NonNull List<RectF> rects, @NonNull Point imageSize, @NonNull Matrix position) {
-      this.rects    = rects;
+    private FaceDetectionResult(@NonNull List<FaceDetector.Face> faces, @NonNull Point imageSize, @NonNull Matrix position) {
+      this.faces    = faces;
       this.position = new Matrix(position);
 
       Matrix imageProjectionMatrix = new Matrix();

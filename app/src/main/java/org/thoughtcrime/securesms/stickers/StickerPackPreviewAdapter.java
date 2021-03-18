@@ -1,16 +1,18 @@
 package org.thoughtcrime.securesms.stickers;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.recyclerview.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.RecyclerView;
+
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 
 import org.thoughtcrime.securesms.R;
+import org.thoughtcrime.securesms.glide.cache.ApngOptions;
 import org.thoughtcrime.securesms.mms.DecryptableStreamUriLoader;
 import org.thoughtcrime.securesms.mms.GlideRequests;
 
@@ -22,11 +24,13 @@ public final class StickerPackPreviewAdapter extends RecyclerView.Adapter<Sticke
   private final GlideRequests                 glideRequests;
   private final EventListener                 eventListener;
   private final List<StickerManifest.Sticker> list;
+  private final boolean                       allowApngAnimation;
 
-  public StickerPackPreviewAdapter(@NonNull GlideRequests glideRequests, @NonNull EventListener eventListener) {
-    this.glideRequests = glideRequests;
-    this.eventListener = eventListener;
-    this.list          = new ArrayList<>();
+  public StickerPackPreviewAdapter(@NonNull GlideRequests glideRequests, @NonNull EventListener eventListener, boolean allowApngAnimation) {
+    this.glideRequests      = glideRequests;
+    this.eventListener      = eventListener;
+    this.allowApngAnimation = allowApngAnimation;
+    this.list               = new ArrayList<>();
   }
 
   @Override
@@ -36,7 +40,7 @@ public final class StickerPackPreviewAdapter extends RecyclerView.Adapter<Sticke
 
   @Override
   public void onBindViewHolder(@NonNull StickerViewHolder stickerViewHolder, int i) {
-    stickerViewHolder.bind(glideRequests, list.get(i), eventListener);
+    stickerViewHolder.bind(glideRequests, list.get(i), eventListener, allowApngAnimation);
   }
 
   @Override
@@ -67,12 +71,17 @@ public final class StickerPackPreviewAdapter extends RecyclerView.Adapter<Sticke
       this.image = itemView.findViewById(R.id.sticker_install_item_image);
     }
 
-    void bind(@NonNull GlideRequests glideRequests, @NonNull StickerManifest.Sticker sticker, @NonNull EventListener eventListener) {
+    void bind(@NonNull GlideRequests glideRequests,
+              @NonNull StickerManifest.Sticker sticker,
+              @NonNull EventListener eventListener,
+              boolean allowApngAnimation)
+    {
       currentEmoji      = sticker.getEmoji();
       currentGlideModel = sticker.getUri().isPresent() ? new DecryptableStreamUriLoader.DecryptableUri(sticker.getUri().get())
                                                        : new StickerRemoteUri(sticker.getPackId(), sticker.getPackKey(), sticker.getId());
       glideRequests.load(currentGlideModel)
                    .transition(DrawableTransitionOptions.withCrossFade())
+                   .set(ApngOptions.ANIMATE, allowApngAnimation)
                    .into(image);
 
       image.setOnLongClickListener(v -> {

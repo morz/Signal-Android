@@ -6,7 +6,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
-import org.thoughtcrime.securesms.logging.Log;
+import org.signal.core.util.logging.Log;
+import org.thoughtcrime.securesms.util.FeatureFlags;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -149,18 +150,21 @@ public abstract class Job {
 
   public static final class Result {
 
-    private static final Result SUCCESS_NO_DATA = new Result(ResultType.SUCCESS, null, null);
-    private static final Result RETRY           = new Result(ResultType.RETRY, null, null);
-    private static final Result FAILURE         = new Result(ResultType.FAILURE, null, null);
+    private static final int INVALID_BACKOFF = -1;
+
+    private static final Result SUCCESS_NO_DATA = new Result(ResultType.SUCCESS, null, null, INVALID_BACKOFF);
+    private static final Result FAILURE         = new Result(ResultType.FAILURE, null, null, INVALID_BACKOFF);
 
     private final ResultType       resultType;
     private final RuntimeException runtimeException;
     private final Data             outputData;
+    private final long             backoffInterval;
 
-    private Result(@NonNull ResultType resultType, @Nullable RuntimeException runtimeException, @Nullable Data outputData) {
+    private Result(@NonNull ResultType resultType, @Nullable RuntimeException runtimeException, @Nullable Data outputData, long backoffInterval) {
       this.resultType       = resultType;
       this.runtimeException = runtimeException;
       this.outputData       = outputData;
+      this.backoffInterval  = backoffInterval;
     }
 
     /** Job completed successfully. */
@@ -170,12 +174,15 @@ public abstract class Job {
 
     /** Job completed successfully and wants to provide some output data. */
     public static Result success(@Nullable Data outputData) {
-      return new Result(ResultType.SUCCESS, null, outputData);
+      return new Result(ResultType.SUCCESS, null, outputData, INVALID_BACKOFF);
     }
 
-    /** Job did not complete successfully, but it can be retried later. */
-    public static Result retry() {
-      return RETRY;
+    /**
+     * Job did not complete successfully, but it can be retried later.
+     * @param backoffInterval How long to wait before retrying
+     */
+    public static Result retry(long backoffInterval) {
+      return new Result(ResultType.RETRY, null, null, backoffInterval);
     }
 
     /** Job did not complete successfully and should not be tried again. Dependent jobs will also be failed.*/
@@ -185,7 +192,7 @@ public abstract class Job {
 
     /** Same as {@link #failure()}, except the app should also crash with the provided exception. */
     public static Result fatalFailure(@NonNull RuntimeException runtimeException) {
-      return new Result(ResultType.FAILURE, runtimeException, null);
+      return new Result(ResultType.FAILURE, runtimeException, null, INVALID_BACKOFF);
     }
 
     boolean isSuccess() {
@@ -206,6 +213,10 @@ public abstract class Job {
 
     @Nullable Data getOutputData() {
       return outputData;
+    }
+
+    long getBackoffInterval() {
+      return backoffInterval;
     }
 
     @Override
@@ -240,8 +251,8 @@ public abstract class Job {
     private final long         createTime;
     private final long         lifespan;
     private final int          maxAttempts;
-    private final long         maxBackoff;
-    private final int          maxInstances;
+    private final int          maxInstancesForFactory;
+    private final int          maxInstancesForQueue;
     private final String       queue;
     private final List<String> constraintKeys;
     private final Data         inputData;
@@ -251,23 +262,23 @@ public abstract class Job {
                        long createTime,
                        long lifespan,
                        int maxAttempts,
-                       long maxBackoff,
-                       int maxInstances,
+                       int maxInstancesForFactory,
+                       int maxInstancesForQueue,
                        @Nullable String queue,
                        @NonNull List<String> constraintKeys,
                        @Nullable Data inputData,
                        boolean memoryOnly)
     {
-      this.id             = id;
-      this.createTime     = createTime;
-      this.lifespan       = lifespan;
-      this.maxAttempts    = maxAttempts;
-      this.maxBackoff     = maxBackoff;
-      this.maxInstances   = maxInstances;
-      this.queue          = queue;
-      this.constraintKeys = constraintKeys;
-      this.inputData      = inputData;
-      this.memoryOnly     = memoryOnly;
+      this.id                     = id;
+      this.createTime             = createTime;
+      this.lifespan               = lifespan;
+      this.maxAttempts            = maxAttempts;
+      this.maxInstancesForFactory = maxInstancesForFactory;
+      this.maxInstancesForQueue   = maxInstancesForQueue;
+      this.queue                  = queue;
+      this.constraintKeys         = constraintKeys;
+      this.inputData              = inputData;
+      this.memoryOnly             = memoryOnly;
     }
 
     @NonNull String getId() {
@@ -286,12 +297,12 @@ public abstract class Job {
       return maxAttempts;
     }
 
-    long getMaxBackoff() {
-      return maxBackoff;
+    int getMaxInstancesForFactory() {
+      return maxInstancesForFactory;
     }
 
-    int getMaxInstances() {
-      return maxInstances;
+    int getMaxInstancesForQueue() {
+      return maxInstancesForQueue;
     }
 
     public @Nullable String getQueue() {
@@ -311,18 +322,17 @@ public abstract class Job {
     }
 
     public Builder toBuilder() {
-      return new Builder(id, createTime, maxBackoff, lifespan, maxAttempts, maxInstances, queue, constraintKeys, inputData, memoryOnly);
+      return new Builder(id, createTime, lifespan, maxAttempts, maxInstancesForFactory, maxInstancesForQueue, queue, constraintKeys, inputData, memoryOnly);
     }
 
 
     public static final class Builder {
-
       private String       id;
       private long         createTime;
-      private long         maxBackoff;
       private long         lifespan;
       private int          maxAttempts;
-      private int          maxInstances;
+      private int          maxInstancesForFactory;
+      private int          maxInstancesForQueue;
       private String       queue;
       private List<String> constraintKeys;
       private Data         inputData;
@@ -333,30 +343,30 @@ public abstract class Job {
       }
 
       Builder(@NonNull String id) {
-        this(id, System.currentTimeMillis(), TimeUnit.SECONDS.toMillis(30), IMMORTAL, 1, UNLIMITED, null, new LinkedList<>(), null, false);
+        this(id, System.currentTimeMillis(), IMMORTAL, 1, UNLIMITED, UNLIMITED, null, new LinkedList<>(), null, false);
       }
 
       private Builder(@NonNull String id,
                       long createTime,
-                      long maxBackoff,
                       long lifespan,
                       int maxAttempts,
-                      int maxInstances,
+                      int maxInstancesForFactory,
+                      int maxInstancesForQueue,
                       @Nullable String queue,
                       @NonNull List<String> constraintKeys,
                       @Nullable Data inputData,
                       boolean memoryOnly)
       {
-        this.id             = id;
-        this.createTime     = createTime;
-        this.maxBackoff     = maxBackoff;
-        this.lifespan       = lifespan;
-        this.maxAttempts    = maxAttempts;
-        this.maxInstances   = maxInstances;
-        this.queue          = queue;
-        this.constraintKeys = constraintKeys;
-        this.inputData      = inputData;
-        this.memoryOnly     = memoryOnly;
+        this.id                     = id;
+        this.createTime             = createTime;
+        this.lifespan               = lifespan;
+        this.maxAttempts            = maxAttempts;
+        this.maxInstancesForFactory = maxInstancesForFactory;
+        this.maxInstancesForQueue   = maxInstancesForQueue;
+        this.queue                  = queue;
+        this.constraintKeys         = constraintKeys;
+        this.inputData              = inputData;
+        this.memoryOnly             = memoryOnly;
       }
 
       /** Should only be invoked by {@link JobController} */
@@ -382,26 +392,31 @@ public abstract class Job {
       }
 
       /**
-       * Specify the longest amount of time to wait between retries. No guarantees that this will
-       * be respected on API >= 26.
-       */
-      public @NonNull Builder setMaxBackoff(long maxBackoff) {
-        this.maxBackoff = maxBackoff;
-        return this;
-      }
-
-      /**
-       * Specify the maximum number of instances you'd want of this job at any given time. If
-       * enqueueing this job would put it over that limit, it will be ignored.
-       *
-       * Duplicates are determined by two jobs having the same {@link Job#getFactoryKey()}.
+       * Specify the maximum number of instances you'd want of this job at any given time, as
+       * determined by the job's factory key. If enqueueing this job would put it over that limit,
+       * it will be ignored.
        *
        * This property is ignored if the job is submitted as part of a {@link JobManager.Chain}.
        *
        * Defaults to {@link #UNLIMITED}.
        */
-      public @NonNull Builder setMaxInstances(int maxInstances) {
-        this.maxInstances = maxInstances;
+      public @NonNull Builder setMaxInstancesForFactory(int maxInstancesForFactory) {
+        this.maxInstancesForFactory = maxInstancesForFactory;
+        return this;
+      }
+
+      /**
+       * Specify the maximum number of instances you'd want of this job at any given time, as
+       * determined by the job's factory key and queue key. If enqueueing this job would put it over
+       * that limit, it will be ignored.
+       *
+       * This property is ignored if the job is submitted as part of a {@link JobManager.Chain}, or
+       * if the job has no queue key.
+       *
+       * Defaults to {@link #UNLIMITED}.
+       */
+      public @NonNull Builder setMaxInstancesForQueue(int maxInstancesForQueue) {
+        this.maxInstancesForQueue = maxInstancesForQueue;
         return this;
       }
 
@@ -455,7 +470,7 @@ public abstract class Job {
       }
 
       public @NonNull Parameters build() {
-        return new Parameters(id, createTime, lifespan, maxAttempts, maxBackoff, maxInstances, queue, constraintKeys, inputData, memoryOnly);
+        return new Parameters(id, createTime, lifespan, maxAttempts, maxInstancesForFactory, maxInstancesForQueue, queue, constraintKeys, inputData, memoryOnly);
       }
     }
   }

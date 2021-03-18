@@ -1,7 +1,6 @@
 package org.thoughtcrime.securesms.recipients;
 
 import android.content.Context;
-import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.WorkerThread;
@@ -12,15 +11,14 @@ import androidx.lifecycle.Observer;
 
 import com.annimon.stream.Stream;
 
-import org.thoughtcrime.securesms.R;
+import org.signal.core.util.ThreadUtil;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.GroupDatabase;
 import org.thoughtcrime.securesms.database.GroupDatabase.GroupRecord;
 import org.thoughtcrime.securesms.database.RecipientDatabase;
 import org.thoughtcrime.securesms.database.RecipientDatabase.RecipientSettings;
-import org.thoughtcrime.securesms.logging.Log;
-import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.thoughtcrime.securesms.util.Util;
+import org.thoughtcrime.securesms.util.livedata.LiveDataUtil;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.util.List;
@@ -35,15 +33,18 @@ public final class LiveRecipient {
 
   private final Context                       context;
   private final MutableLiveData<Recipient>    liveData;
+  private final LiveData<Recipient>           observableLiveData;
+  private final LiveData<Recipient>           observableLiveDataResolved;
   private final Set<RecipientForeverObserver> observers;
   private final Observer<Recipient>           foreverObserver;
   private final AtomicReference<Recipient>    recipient;
   private final RecipientDatabase             recipientDatabase;
   private final GroupDatabase                 groupDatabase;
+  private final MutableLiveData<Object>       refreshForceNotify;
 
-  LiveRecipient(@NonNull Context context, @NonNull MutableLiveData<Recipient> liveData, @NonNull Recipient defaultRecipient) {
+  LiveRecipient(@NonNull Context context, @NonNull Recipient defaultRecipient) {
     this.context           = context.getApplicationContext();
-    this.liveData          = liveData;
+    this.liveData          = new MutableLiveData<>(defaultRecipient);
     this.recipient         = new AtomicReference<>(defaultRecipient);
     this.recipientDatabase = DatabaseFactory.getRecipientDatabase(context);
     this.groupDatabase     = DatabaseFactory.getGroupDatabase(context);
@@ -53,6 +54,11 @@ public final class LiveRecipient {
         o.onRecipientChanged(recipient);
       }
     };
+    this.refreshForceNotify = new MutableLiveData<>(new Object());
+    this.observableLiveData = LiveDataUtil.combineLatest(LiveDataUtil.distinctUntilChanged(liveData, Recipient::hasSameContent),
+                                                         refreshForceNotify,
+                                                         (recipient, force) -> recipient);
+    this.observableLiveDataResolved = LiveDataUtil.filter(this.observableLiveData, r -> !r.isResolving());
   }
 
   public @NonNull RecipientId getId() {
@@ -73,14 +79,14 @@ public final class LiveRecipient {
    * use {@link #removeObservers(LifecycleOwner)}.
    */
   public void observe(@NonNull LifecycleOwner owner, @NonNull Observer<Recipient> observer) {
-    Util.postToMain(() -> liveData.observe(owner, observer));
+    ThreadUtil.postToMain(() -> observableLiveData.observe(owner, observer));
   }
 
   /**
    * Removes all observers of this data registered for the given LifecycleOwner.
    */
   public void removeObservers(@NonNull LifecycleOwner owner) {
-    Util.runOnMain(() -> liveData.removeObservers(owner));
+    ThreadUtil.runOnMain(() -> observableLiveData.removeObservers(owner));
   }
 
   /**
@@ -89,12 +95,11 @@ public final class LiveRecipient {
    * {@link #observe(LifecycleOwner, Observer<Recipient>)} if possible, as it is lifecycle-safe.
    */
   public void observeForever(@NonNull RecipientForeverObserver observer) {
-    Util.postToMain(() -> {
-      observers.add(observer);
-
-      if (observers.size() == 1) {
-        liveData.observeForever(foreverObserver);
+    ThreadUtil.postToMain(() -> {
+      if (observers.isEmpty()) {
+        observableLiveData.observeForever(foreverObserver);
       }
+      observers.add(observer);
     });
   }
 
@@ -102,11 +107,11 @@ public final class LiveRecipient {
    * Unsubscribes the provided {@link RecipientForeverObserver} from future changes.
    */
   public void removeForeverObserver(@NonNull RecipientForeverObserver observer) {
-    Util.postToMain(() -> {
+    ThreadUtil.postToMain(() -> {
       observers.remove(observer);
 
       if (observers.isEmpty()) {
-        liveData.removeObserver(foreverObserver);
+        observableLiveData.removeObserver(foreverObserver);
       }
     });
   }
@@ -122,7 +127,7 @@ public final class LiveRecipient {
       return current;
     }
 
-    if (Util.isMainThread()) {
+    if (ThreadUtil.isMainThread()) {
       Log.w(TAG, "[Resolve][MAIN] " + getId(), new Throwable());
     }
 
@@ -158,7 +163,7 @@ public final class LiveRecipient {
 
     if (getId().isUnknown()) return;
 
-    if (Util.isMainThread()) {
+    if (ThreadUtil.isMainThread()) {
       Log.w(TAG, "[Refresh][MAIN] " + id, new Throwable());
     }
 
@@ -173,10 +178,15 @@ public final class LiveRecipient {
     }
 
     set(recipient);
+    refreshForceNotify.postValue(new Object());
   }
 
   public @NonNull LiveData<Recipient> getLiveData() {
-    return liveData;
+    return observableLiveData;
+  }
+
+  public @NonNull LiveData<Recipient> getLiveDataResolved() {
+    return observableLiveDataResolved;
   }
 
   private @NonNull Recipient fetchAndCacheRecipientFromDisk(@NonNull RecipientId id) {
@@ -202,10 +212,10 @@ public final class LiveRecipient {
         avatarId = Optional.of(groupRecord.get().getAvatarId());
       }
 
-      return new RecipientDetails(title, avatarId, false, false, settings, members);
+      return new RecipientDetails(title, null,  avatarId, false, false, settings, members);
     }
 
-    return new RecipientDetails(null, Optional.absent(), false, false, settings, null);
+    return new RecipientDetails(null, null, Optional.absent(), false, false, settings, null);
   }
 
   synchronized void set(@NonNull Recipient recipient) {

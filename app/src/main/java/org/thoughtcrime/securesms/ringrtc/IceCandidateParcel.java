@@ -2,13 +2,10 @@ package org.thoughtcrime.securesms.ringrtc;
 
 import android.os.Parcel;
 import android.os.Parcelable;
+
 import androidx.annotation.NonNull;
 
-import com.google.protobuf.ByteString;
-
 import org.signal.ringrtc.CallId;
-import org.signal.ringrtc.IceCandidate;
-
 import org.whispersystems.signalservice.api.messages.calls.IceUpdateMessage;
 
 /**
@@ -19,29 +16,28 @@ import org.whispersystems.signalservice.api.messages.calls.IceUpdateMessage;
  */
 public class IceCandidateParcel implements Parcelable {
 
-  @NonNull private final IceCandidate iceCandidate;
+  @NonNull private final byte[] iceCandidate;
 
-  public IceCandidateParcel(@NonNull IceCandidate iceCandidate) {
+  public IceCandidateParcel(@NonNull byte[] iceCandidate) {
     this.iceCandidate = iceCandidate;
   }
 
   public IceCandidateParcel(@NonNull IceUpdateMessage iceUpdateMessage) {
-    this.iceCandidate = new IceCandidate(iceUpdateMessage.getOpaque(), iceUpdateMessage.getSdp());
+    this.iceCandidate = iceUpdateMessage.getOpaque();
   }
 
   private IceCandidateParcel(@NonNull Parcel in) {
-    this.iceCandidate = new IceCandidate(in.createByteArray(),
-                                         in.readString());
+    this.iceCandidate = in.createByteArray();
   }
 
-  public @NonNull IceCandidate getIceCandidate() {
+  public @NonNull byte[] getIceCandidate() {
     return iceCandidate;
   }
 
   public @NonNull IceUpdateMessage getIceUpdateMessage(@NonNull CallId callId) {
     return new IceUpdateMessage(callId.longValue(),
-                                iceCandidate.getOpaque(),
-                                iceCandidate.getSdp());
+                                iceCandidate,
+                                null);
   }
 
   @Override
@@ -51,8 +47,7 @@ public class IceCandidateParcel implements Parcelable {
 
   @Override
   public void writeToParcel(@NonNull Parcel dest, int flags) {
-    dest.writeByteArray(iceCandidate.getOpaque());
-    dest.writeString(iceCandidate.getSdp());
+    dest.writeByteArray(iceCandidate);
   }
 
   public static final Creator<IceCandidateParcel> CREATOR = new Creator<IceCandidateParcel>() {

@@ -4,14 +4,17 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.net.Uri;
-import androidx.appcompat.app.AlertDialog;
-import org.thoughtcrime.securesms.logging.Log;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
+
+import org.signal.core.util.logging.Log;
+import org.thoughtcrime.securesms.BuildConfig;
 import org.thoughtcrime.securesms.R;
+import org.thoughtcrime.securesms.util.PlayStoreUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
+import org.thoughtcrime.securesms.util.VersionTracker;
 
 import java.util.concurrent.TimeUnit;
 
@@ -23,9 +26,9 @@ public class RatingManager {
   private static final String TAG = RatingManager.class.getSimpleName();
 
   public static void showRatingDialogIfNecessary(Context context) {
-    if (!TextSecurePreferences.isRatingEnabled(context)) return;
+    if (!TextSecurePreferences.isRatingEnabled(context) || BuildConfig.PLAY_STORE_DISABLED) return;
 
-    long daysSinceInstall = getDaysSinceInstalled(context);
+    long daysSinceInstall = VersionTracker.getDaysSinceFirstInstalled(context);
     long laterTimestamp   = TextSecurePreferences.getRatingLaterTimestamp(context);
 
     if (daysSinceInstall >= DAYS_SINCE_INSTALL_THRESHOLD &&
@@ -43,7 +46,7 @@ public class RatingManager {
           @Override
           public void onClick(DialogInterface dialog, int which) {
             TextSecurePreferences.setRatingEnabled(context, false);
-            startPlayStore(context);
+            PlayStoreUtil.openPlayStoreOrOurApkDownloadPage(context);
          }
        })
        .setNegativeButton(R.string.RatingManager_no_thanks, new DialogInterface.OnClickListener() {
@@ -61,28 +64,4 @@ public class RatingManager {
        })
        .show();
   }
-
-  private static void startPlayStore(Context context) {
-    Uri uri = Uri.parse("market://details?id=" + context.getPackageName());
-    try {
-      context.startActivity(new Intent(Intent.ACTION_VIEW, uri));
-    } catch (ActivityNotFoundException e) {
-      Log.w(TAG, e);
-      Toast.makeText(context, R.string.RatingManager_whoops_the_play_store_app_does_not_appear_to_be_installed, Toast.LENGTH_LONG).show();
-    }
-  }
-
-  private static long getDaysSinceInstalled(Context context) {
-    try {
-      long installTimestamp = context.getPackageManager()
-                                     .getPackageInfo(context.getPackageName(), 0)
-                                     .firstInstallTime;
-
-      return TimeUnit.MILLISECONDS.toDays(System.currentTimeMillis() - installTimestamp);
-    } catch (PackageManager.NameNotFoundException e) {
-      Log.w(TAG, e);
-      return 0;
-    }
-  }
-
 }

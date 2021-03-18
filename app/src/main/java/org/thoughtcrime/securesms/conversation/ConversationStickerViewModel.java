@@ -1,21 +1,22 @@
 package org.thoughtcrime.securesms.conversation;
 
 import android.app.Application;
+import android.database.ContentObserver;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.TextUtils;
+
+import androidx.annotation.NonNull;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 import androidx.lifecycle.ViewModelProvider;
-import android.database.ContentObserver;
-import android.os.Handler;
-import androidx.annotation.NonNull;
-import android.text.TextUtils;
 
 import org.thoughtcrime.securesms.components.emoji.EmojiUtil;
 import org.thoughtcrime.securesms.database.CursorList;
 import org.thoughtcrime.securesms.database.DatabaseContentProviders;
 import org.thoughtcrime.securesms.database.model.StickerRecord;
 import org.thoughtcrime.securesms.stickers.StickerSearchRepository;
-import org.thoughtcrime.securesms.util.CloseableLiveData;
 import org.thoughtcrime.securesms.util.Throttler;
 
 import java.util.List;
@@ -35,7 +36,7 @@ class ConversationStickerViewModel extends ViewModel {
     this.stickers              = new MutableLiveData<>();
     this.stickersAvailable     = new MutableLiveData<>();
     this.availabilityThrottler = new Throttler(500);
-    this.packObserver          = new ContentObserver(new Handler()) {
+    this.packObserver          = new ContentObserver(new Handler(Looper.getMainLooper())) {
       @Override
       public void onChange(boolean selfChange) {
         availabilityThrottler.publish(() -> repository.getStickerFeatureAvailability(stickersAvailable::postValue));

@@ -14,13 +14,14 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 
 import org.thoughtcrime.securesms.BuildConfig;
-import org.thoughtcrime.securesms.push.SignalServiceNetworkAccess;
 import org.thoughtcrime.securesms.util.AppSignatureUtil;
 import org.thoughtcrime.securesms.util.ByteUnit;
 import org.thoughtcrime.securesms.util.CensorshipUtil;
+import org.thoughtcrime.securesms.util.DeviceProperties;
 import org.thoughtcrime.securesms.util.ServiceUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.Util;
+import org.thoughtcrime.securesms.util.VersionTracker;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -40,37 +41,45 @@ public class LogSectionSystemInfo implements LogSection {
     final PackageManager pm      = context.getPackageManager();
     final StringBuilder  builder = new StringBuilder();
 
-    builder.append("Time         : ").append(System.currentTimeMillis()).append('\n');
-    builder.append("Manufacturer : ").append(Build.MANUFACTURER).append("\n");
-    builder.append("Model        : ").append(Build.MODEL).append("\n");
-    builder.append("Product      : ").append(Build.PRODUCT).append("\n");
-    builder.append("Screen       : ").append(getScreenResolution(context)).append(", ")
+    builder.append("Time          : ").append(System.currentTimeMillis()).append('\n');
+    builder.append("Manufacturer  : ").append(Build.MANUFACTURER).append("\n");
+    builder.append("Model         : ").append(Build.MODEL).append("\n");
+    builder.append("Product       : ").append(Build.PRODUCT).append("\n");
+    builder.append("Screen        : ").append(getScreenResolution(context)).append(", ")
                                      .append(getScreenDensityClass(context)).append(", ")
                                      .append(getScreenRefreshRate(context)).append("\n");
-    builder.append("Font Scale   : ").append(context.getResources().getConfiguration().fontScale).append("\n");
-    builder.append("Android      : ").append(Build.VERSION.RELEASE).append(" (")
+    builder.append("Font Scale    : ").append(context.getResources().getConfiguration().fontScale).append("\n");
+    builder.append("Android       : ").append(Build.VERSION.RELEASE).append(" (")
                                      .append(Build.VERSION.INCREMENTAL).append(", ")
                                      .append(Build.DISPLAY).append(")\n");
-    builder.append("ABIs         : ").append(TextUtils.join(", ", getSupportedAbis())).append("\n");
-    builder.append("Memory       : ").append(getMemoryUsage()).append("\n");
-    builder.append("Memclass     : ").append(getMemoryClass(context)).append("\n");
-    builder.append("OS Host      : ").append(Build.HOST).append("\n");
-    builder.append("Censored     : ").append(CensorshipUtil.isCensored(context)).append("\n");
-    builder.append("Play Services: ").append(getPlayServicesString(context)).append("\n");
-    builder.append("FCM          : ").append(!TextSecurePreferences.isFcmDisabled(context)).append("\n");
-    builder.append("First Version: ").append(TextSecurePreferences.getFirstInstallVersion(context)).append("\n");
-    builder.append("App          : ");
+    builder.append("ABIs          : ").append(TextUtils.join(", ", getSupportedAbis())).append("\n");
+    builder.append("Memory        : ").append(getMemoryUsage()).append("\n");
+    builder.append("Memclass      : ").append(getMemoryClass(context)).append("\n");
+    builder.append("MemInfo       : ").append(getMemoryInfo(context)).append("\n");
+    builder.append("OS Host       : ").append(Build.HOST).append("\n");
+    builder.append("Censored      : ").append(CensorshipUtil.isCensored(context)).append("\n");
+    builder.append("Play Services : ").append(getPlayServicesString(context)).append("\n");
+    builder.append("FCM           : ").append(!TextSecurePreferences.isFcmDisabled(context)).append("\n");
+    builder.append("BkgRestricted : ").append(Build.VERSION.SDK_INT >= 28 ? DeviceProperties.isBackgroundRestricted(context) : "N/A").append("\n");
+    builder.append("Locale        : ").append(Locale.getDefault().toString()).append("\n");
+    builder.append("Linked Devices: ").append(TextSecurePreferences.isMultiDevice(context)).append("\n");
+    builder.append("First Version : ").append(TextSecurePreferences.getFirstInstallVersion(context)).append("\n");
+    builder.append("Days Installed: ").append(VersionTracker.getDaysSinceFirstInstalled(context)).append("\n");
+    builder.append("App           : ");
     try {
       builder.append(pm.getApplicationLabel(pm.getApplicationInfo(context.getPackageName(), 0)))
              .append(" ")
              .append(pm.getPackageInfo(context.getPackageName(), 0).versionName)
              .append(" (")
+             .append(BuildConfig.CANONICAL_VERSION_CODE)
+             .append(", ")
              .append(Util.getManifestApkVersion(context))
-             .append(")\n");
+             .append(") (")
+             .append(BuildConfig.GIT_HASH).append(") \n");
     } catch (PackageManager.NameNotFoundException nnfe) {
       builder.append("Unknown\n");
     }
-    builder.append("Package      : ").append(BuildConfig.APPLICATION_ID).append(" (").append(getSigningString(context)).append(")");
+    builder.append("Package       : ").append(BuildConfig.APPLICATION_ID).append(" (").append(getSigningString(context)).append(")");
 
     return builder;
   }
@@ -95,6 +104,12 @@ public class LogSectionSystemInfo implements LogSection {
     }
 
     return activityManager.getMemoryClass() + lowMem;
+  }
+
+  private static @NonNull String getMemoryInfo(Context context) {
+    ActivityManager.MemoryInfo info = DeviceProperties.getMemoryInfo(context);
+    return String.format(Locale.US, "availMem: %d mb, totalMem: %d mb, threshold: %d mb, lowMemory: %b",
+                         ByteUnit.BYTES.toMegabytes(info.availMem), ByteUnit.BYTES.toMegabytes(info.totalMem), ByteUnit.BYTES.toMegabytes(info.threshold), info.lowMemory);
   }
 
   private static @NonNull Iterable<String> getSupportedAbis() {

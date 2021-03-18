@@ -3,10 +3,16 @@ package org.thoughtcrime.securesms.push;
 
 import android.content.Context;
 
+import com.annimon.stream.Stream;
+
 import androidx.annotation.Nullable;
 
 import org.thoughtcrime.securesms.BuildConfig;
+import org.thoughtcrime.securesms.keyvalue.SignalStore;
 import org.thoughtcrime.securesms.net.CustomDns;
+import org.thoughtcrime.securesms.net.DeprecatedClientPreventionInterceptor;
+import org.thoughtcrime.securesms.net.DeviceTransferBlockingInterceptor;
+import org.thoughtcrime.securesms.net.RemoteDeprecationDetectorInterceptor;
 import org.thoughtcrime.securesms.net.SequentialDns;
 import org.thoughtcrime.securesms.net.StandardUserAgentInterceptor;
 import org.thoughtcrime.securesms.util.Base64;
@@ -21,10 +27,13 @@ import org.whispersystems.signalservice.internal.configuration.SignalServiceUrl;
 import org.whispersystems.signalservice.internal.configuration.SignalStorageUrl;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import javax.net.ssl.SSLContext;
 
 import okhttp3.CipherSuite;
 import okhttp3.ConnectionSpec;
@@ -43,8 +52,15 @@ public class SignalServiceNetworkAccess {
   private static final String COUNTRY_CODE_UAE   = "+971";
   private static final String COUNTRY_CODE_OMAN  = "+968";
   private static final String COUNTRY_CODE_QATAR = "+974";
+  private static final String COUNTRY_CODE_IRAN  = "+98";
 
   private static final String SERVICE_REFLECTOR_HOST = "europe-west1-signal-cdn-reflector.cloudfunctions.net";
+  private static final String SERVICE_FASTLY_HOST    = "textsecure-service.whispersystems.org.global.prod.fastly.net";
+  private static final String STORAGE_FASTLY_HOST    = "storage.signal.org.global.prod.fastly.net";
+  private static final String CDN_FASTLY_HOST        = "cdn.signal.org.global.prod.fastly.net";
+  private static final String CDN2_FASTLY_HOST       = "cdn2.signal.org.global.prod.fastly.net";
+  private static final String DIRECTORY_FASTLY_HOST  = "api.directory.signal.org.global.prod.fastly.net";
+  private static final String KBS_FASTLY_HOST        = "api.backup.signal.org.global.prod.fastly.net";
 
   private static final ConnectionSpec GMAPS_CONNECTION_SPEC = new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
       .tlsVersions(TlsVersion.TLS_1_2)
@@ -93,6 +109,7 @@ public class SignalServiceNetworkAccess {
       .supportsTlsExtensions(true)
       .build();
 
+  private static final ConnectionSpec APP_CONNECTION_SPEC = ConnectionSpec.MODERN_TLS;
 
   private final Map<String, SignalServiceConfiguration> censorshipConfiguration;
   private final String[]                                censoredCountries;
@@ -141,6 +158,7 @@ public class SignalServiceNetworkAccess {
     final SignalContactDiscoveryUrl omanGoogleDiscovery     = new SignalContactDiscoveryUrl("https://www.google.com.om/directory", SERVICE_REFLECTOR_HOST, trustStore, GMAIL_CONNECTION_SPEC);
     final SignalContactDiscoveryUrl qatarGoogleDiscovery    = new SignalContactDiscoveryUrl("https://www.google.com.qa/directory", SERVICE_REFLECTOR_HOST, trustStore, GMAIL_CONNECTION_SPEC);
 
+
     final SignalKeyBackupServiceUrl baseGoogleKbs     = new SignalKeyBackupServiceUrl("https://www.google.com/backup", SERVICE_REFLECTOR_HOST, trustStore, GMAIL_CONNECTION_SPEC);
     final SignalKeyBackupServiceUrl baseAndroidKbs    = new SignalKeyBackupServiceUrl("https://android.clients.google.com/backup", SERVICE_REFLECTOR_HOST, trustStore, PLAY_CONNECTION_SPEC);
     final SignalKeyBackupServiceUrl mapsOneAndroidKbs = new SignalKeyBackupServiceUrl("https://clients3.google.com/backup", SERVICE_REFLECTOR_HOST, trustStore, GMAPS_CONNECTION_SPEC);
@@ -161,7 +179,12 @@ public class SignalServiceNetworkAccess {
     final SignalStorageUrl omanGoogleStorage     = new SignalStorageUrl("https://www.google.com.om/storage", SERVICE_REFLECTOR_HOST, trustStore, GMAIL_CONNECTION_SPEC);
     final SignalStorageUrl qatarGoogleStorage    = new SignalStorageUrl("https://www.google.com.qa/storage", SERVICE_REFLECTOR_HOST, trustStore, GMAIL_CONNECTION_SPEC);
 
-    final List<Interceptor> interceptors = Collections.singletonList(new StandardUserAgentInterceptor());
+    final String[] fastUrls = {"https://cdn.sstatic.net", "https://github.githubassets.com", "https://pinterest.com", "https://open.scdn.co", "https://www.redditstatic.com"};
+
+    final List<Interceptor> interceptors = Arrays.asList(new StandardUserAgentInterceptor(),
+                                                         new RemoteDeprecationDetectorInterceptor(),
+                                                         new DeprecatedClientPreventionInterceptor(),
+                                                         DeviceTransferBlockingInterceptor.getInstance());
     final Optional<Dns>     dns          = Optional.of(DNS);
 
     final byte[] zkGroupServerPublicParams;
@@ -173,6 +196,7 @@ public class SignalServiceNetworkAccess {
     }
 
     this.censorshipConfiguration = new HashMap<String, SignalServiceConfiguration>() {{
+
       put(COUNTRY_CODE_EGYPT, new SignalServiceConfiguration(new SignalServiceUrl[] {egyptGoogleService, baseGoogleService, baseAndroidService, mapsOneAndroidService, mapsTwoAndroidService, mailAndroidService},
                                                              makeSignalCdnUrlMapFor(new SignalCdnUrl[] {egyptGoogleCdn, baseAndroidCdn, baseGoogleCdn, mapsOneAndroidCdn, mapsTwoAndroidCdn, mailAndroidCdn, mailAndroidCdn},
                                                                                     new SignalCdnUrl[] {egyptGoogleCdn2, baseAndroidCdn2, baseGoogleCdn2, mapsOneAndroidCdn2, mapsTwoAndroidCdn2, mailAndroidCdn2, mailAndroidCdn2}),
@@ -181,6 +205,7 @@ public class SignalServiceNetworkAccess {
                                                              new SignalStorageUrl[] {egyptGoogleStorage, baseGoogleStorage, baseAndroidStorage, mapsOneAndroidStorage, mapsTwoAndroidStorage, mailAndroidStorage},
                                                              interceptors,
                                                              dns,
+                                                             Optional.absent(),
                                                              zkGroupServerPublicParams));
 
       put(COUNTRY_CODE_UAE, new SignalServiceConfiguration(new SignalServiceUrl[] {uaeGoogleService, baseAndroidService, baseGoogleService, mapsOneAndroidService, mapsTwoAndroidService, mailAndroidService},
@@ -191,6 +216,7 @@ public class SignalServiceNetworkAccess {
                                                            new SignalStorageUrl[] {uaeGoogleStorage, baseGoogleStorage, baseAndroidStorage, mapsOneAndroidStorage, mapsTwoAndroidStorage, mailAndroidStorage},
                                                            interceptors,
                                                            dns,
+                                                           Optional.absent(),
                                                            zkGroupServerPublicParams));
 
       put(COUNTRY_CODE_OMAN, new SignalServiceConfiguration(new SignalServiceUrl[] {omanGoogleService, baseAndroidService, baseGoogleService, mapsOneAndroidService, mapsTwoAndroidService, mailAndroidService},
@@ -201,6 +227,7 @@ public class SignalServiceNetworkAccess {
                                                             new SignalStorageUrl[] {omanGoogleStorage, baseGoogleStorage, baseAndroidStorage, mapsOneAndroidStorage, mapsTwoAndroidStorage, mailAndroidStorage},
                                                             interceptors,
                                                             dns,
+                                                            Optional.absent(),
                                                             zkGroupServerPublicParams));
 
 
@@ -212,7 +239,19 @@ public class SignalServiceNetworkAccess {
                                                              new SignalStorageUrl[] {qatarGoogleStorage, baseGoogleStorage, baseAndroidStorage, mapsOneAndroidStorage, mapsTwoAndroidStorage, mailAndroidStorage},
                                                              interceptors,
                                                              dns,
+                                                             Optional.absent(),
                                                              zkGroupServerPublicParams));
+
+      put(COUNTRY_CODE_IRAN, new SignalServiceConfiguration(Stream.of(fastUrls).map(url -> new SignalServiceUrl(url, SERVICE_FASTLY_HOST, new DomainFrontingDigicertTrustStore(context), APP_CONNECTION_SPEC)).toArray(SignalServiceUrl[]::new),
+                                                            makeSignalCdnUrlMapFor(Stream.of(fastUrls).map(url -> new SignalCdnUrl(url, CDN_FASTLY_HOST, new DomainFrontingDigicertTrustStore(context), APP_CONNECTION_SPEC)).toArray(SignalCdnUrl[]::new),
+                                                                                   Stream.of(fastUrls).map(url -> new SignalCdnUrl(url, CDN2_FASTLY_HOST, new DomainFrontingDigicertTrustStore(context), APP_CONNECTION_SPEC)).toArray(SignalCdnUrl[]::new)),
+                                                            Stream.of(fastUrls).map(url -> new SignalContactDiscoveryUrl(url, DIRECTORY_FASTLY_HOST, new DomainFrontingDigicertTrustStore(context), APP_CONNECTION_SPEC)).toArray(SignalContactDiscoveryUrl[]::new),
+                                                            Stream.of(fastUrls).map(url -> new SignalKeyBackupServiceUrl(url, KBS_FASTLY_HOST, new DomainFrontingDigicertTrustStore(context), APP_CONNECTION_SPEC)).toArray(SignalKeyBackupServiceUrl[]::new),
+                                                            Stream.of(fastUrls).map(url -> new SignalStorageUrl(url, STORAGE_FASTLY_HOST, new DomainFrontingDigicertTrustStore(context), APP_CONNECTION_SPEC)).toArray(SignalStorageUrl[]::new),
+                                                            interceptors,
+                                                            dns,
+                                                            Optional.absent(),
+                                                            zkGroupServerPublicParams));
     }};
 
     this.uncensoredConfiguration = new SignalServiceConfiguration(new SignalServiceUrl[] {new SignalServiceUrl(BuildConfig.SIGNAL_URL, new SignalServiceTrustStore(context))},
@@ -223,6 +262,7 @@ public class SignalServiceNetworkAccess {
                                                                   new SignalStorageUrl[] {new SignalStorageUrl(BuildConfig.STORAGE_URL, new SignalServiceTrustStore(context))},
                                                                   interceptors,
                                                                   dns,
+                                                                  SignalStore.proxy().isProxyEnabled() ? Optional.of(SignalStore.proxy().getProxy()) : Optional.absent(),
                                                                   zkGroupServerPublicParams);
 
     this.censoredCountries = this.censorshipConfiguration.keySet().toArray(new String[0]);
@@ -234,7 +274,13 @@ public class SignalServiceNetworkAccess {
   }
 
   public SignalServiceConfiguration getConfiguration(@Nullable String localNumber) {
-    if (localNumber == null) return this.uncensoredConfiguration;
+    if (localNumber == null || SignalStore.proxy().isProxyEnabled()) {
+      return this.uncensoredConfiguration;
+    }
+
+    if (SignalStore.internalValues().forcedCensorship()) {
+      return this.censorshipConfiguration.get(COUNTRY_CODE_IRAN);
+    }
 
     for (String censoredRegion : this.censoredCountries) {
       if (localNumber.startsWith(censoredRegion)) {

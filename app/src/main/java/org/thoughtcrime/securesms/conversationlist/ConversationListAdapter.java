@@ -7,10 +7,12 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.paging.PagedListAdapter;
+import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.DiffUtil;
+import androidx.recyclerview.widget.ListAdapter;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.signal.paging.PagingController;
 import org.thoughtcrime.securesms.BindableConversationListItem;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.conversationlist.model.Conversation;
@@ -28,7 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-class ConversationListAdapter extends PagedListAdapter<Conversation, RecyclerView.ViewHolder> {
+class ConversationListAdapter extends ListAdapter<Conversation, RecyclerView.ViewHolder> {
 
   private static final int TYPE_THREAD      = 1;
   private static final int TYPE_ACTION      = 2;
@@ -46,6 +48,8 @@ class ConversationListAdapter extends PagedListAdapter<Conversation, RecyclerVie
   private       boolean                     batchMode = false;
   private final Set<Long>                   typingSet = new HashSet<>();
 
+  private PagingController pagingController;
+
   protected ConversationListAdapter(@NonNull GlideRequests glideRequests,
                                     @NonNull OnConversationClickListener onConversationClickListener)
   {
@@ -53,6 +57,8 @@ class ConversationListAdapter extends PagedListAdapter<Conversation, RecyclerVie
 
     this.glideRequests               = glideRequests;
     this.onConversationClickListener = onConversationClickListener;
+
+    this.setHasStableIds(true);
   }
 
   @Override
@@ -154,6 +160,36 @@ class ConversationListAdapter extends PagedListAdapter<Conversation, RecyclerVie
     if (holder instanceof ConversationViewHolder) {
       ((ConversationViewHolder) holder).getConversationListItem().unbind();
     }
+  }
+
+  @Override
+  protected Conversation getItem(int position) {
+    if (pagingController != null) {
+      pagingController.onDataNeededAroundIndex(position);
+    }
+
+    return super.getItem(position);
+  }
+
+  @Override
+  public long getItemId(int position) {
+    Conversation item = getItem(position);
+
+    if (item == null) {
+      return 0;
+    }
+
+    switch (item.getType()) {
+      case THREAD:          return item.getThreadRecord().getThreadId();
+      case PINNED_HEADER:   return -1;
+      case UNPINNED_HEADER: return -2;
+      case ARCHIVED_FOOTER: return -3;
+      default:              throw new AssertionError();
+    }
+  }
+
+  public void setPagingController(@Nullable PagingController pagingController) {
+    this.pagingController = pagingController;
   }
 
   void setTypingThreads(@NonNull Set<Long> typingThreadSet) {

@@ -1,10 +1,5 @@
 package org.thoughtcrime.securesms.stickers;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.StringRes;
-import androidx.core.content.ContextCompat;
-import androidx.recyclerview.widget.RecyclerView;
-
 import android.content.Context;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
@@ -16,15 +11,19 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
+import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.RecyclerView;
+
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.components.emoji.EmojiTextView;
 import org.thoughtcrime.securesms.database.model.StickerPackRecord;
-import org.thoughtcrime.securesms.jobmanager.Constraint;
+import org.thoughtcrime.securesms.glide.cache.ApngOptions;
 import org.thoughtcrime.securesms.mms.DecryptableStreamUriLoader.DecryptableUri;
 import org.thoughtcrime.securesms.mms.GlideRequests;
-import org.thoughtcrime.securesms.util.FeatureFlags;
 import org.thoughtcrime.securesms.util.adapter.SectionedRecyclerViewAdapter;
 import org.thoughtcrime.securesms.util.adapter.StableIdGenerator;
 
@@ -40,6 +39,7 @@ final class StickerManagementAdapter extends SectionedRecyclerViewAdapter<String
 
   private final GlideRequests  glideRequests;
   private final EventListener  eventListener;
+  private final boolean        allowApngAnimation;
 
   private final List<StickerSection> sections = new ArrayList<StickerSection>(3) {{
     StickerSection yourStickers    = new StickerSection(TAG_YOUR_STICKERS,
@@ -57,9 +57,10 @@ final class StickerManagementAdapter extends SectionedRecyclerViewAdapter<String
     add(messageStickers);
   }};
 
-  StickerManagementAdapter(@NonNull GlideRequests glideRequests, @NonNull EventListener eventListener) {
-    this.glideRequests = glideRequests;
-    this.eventListener = eventListener;
+  StickerManagementAdapter(@NonNull GlideRequests glideRequests, @NonNull EventListener eventListener, boolean allowApngAnimation) {
+    this.glideRequests      = glideRequests;
+    this.eventListener      = eventListener;
+    this.allowApngAnimation = allowApngAnimation;
   }
 
   @Override
@@ -84,7 +85,7 @@ final class StickerManagementAdapter extends SectionedRecyclerViewAdapter<String
 
   @Override
   public void bindViewHolder(@NonNull RecyclerView.ViewHolder viewHolder, @NonNull StickerSection section, int localPosition) {
-    section.bindViewHolder(viewHolder, localPosition, glideRequests, eventListener);
+    section.bindViewHolder(viewHolder, localPosition, glideRequests, eventListener, allowApngAnimation);
   }
 
   @Override
@@ -200,14 +201,15 @@ final class StickerManagementAdapter extends SectionedRecyclerViewAdapter<String
     void bindViewHolder(@NonNull RecyclerView.ViewHolder viewHolder,
                         int localPosition,
                         @NonNull GlideRequests glideRequests,
-                        @NonNull EventListener eventListener)
+                        @NonNull EventListener eventListener,
+                        boolean allowApngAnimation)
     {
       if (localPosition == 0) {
         ((HeaderViewHolder) viewHolder).bind(titleResId);
       } else if (records.isEmpty()) {
         ((EmptyViewHolder) viewHolder).bind(emptyResId);
       } else {
-        ((StickerViewHolder) viewHolder).bind(glideRequests, eventListener, records.get(localPosition - 1), localPosition == records.size());
+        ((StickerViewHolder) viewHolder).bind(glideRequests, eventListener, records.get(localPosition - 1), localPosition == records.size(), allowApngAnimation);
       }
     }
 
@@ -256,7 +258,8 @@ final class StickerManagementAdapter extends SectionedRecyclerViewAdapter<String
     void bind(@NonNull GlideRequests glideRequests,
               @NonNull EventListener eventListener,
               @NonNull StickerPackRecord stickerPack,
-              boolean lastInList)
+              boolean lastInList,
+              boolean allowApngAnimation)
     {
       title.setText(stickerPack.getTitle().or(itemView.getResources().getString(R.string.StickerManagementAdapter_untitled)));
       author.setText(stickerPack.getAuthor().or(itemView.getResources().getString(R.string.StickerManagementAdapter_unknown)));
@@ -270,6 +273,7 @@ final class StickerManagementAdapter extends SectionedRecyclerViewAdapter<String
 
       glideRequests.load(new DecryptableUri(stickerPack.getCover().getUri()))
                    .transition(DrawableTransitionOptions.withCrossFade())
+                   .set(ApngOptions.ANIMATE, allowApngAnimation)
                    .into(cover);
 
       if (stickerPack.isInstalled()) {

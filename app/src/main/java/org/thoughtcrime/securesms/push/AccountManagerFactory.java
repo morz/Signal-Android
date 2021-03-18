@@ -1,17 +1,15 @@
 package org.thoughtcrime.securesms.push;
 
 import android.content.Context;
-import android.os.AsyncTask;
 
 import androidx.annotation.NonNull;
 
-import org.thoughtcrime.securesms.logging.Log;
-
 import com.google.android.gms.security.ProviderInstaller;
 
+import org.signal.core.util.concurrent.SignalExecutors;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.BuildConfig;
-import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
+import org.thoughtcrime.securesms.util.FeatureFlags;
 import org.whispersystems.signalservice.api.SignalServiceAccountManager;
 
 import java.util.UUID;
@@ -36,7 +34,7 @@ public class AccountManagerFactory {
     }
 
     return new SignalServiceAccountManager(new SignalServiceNetworkAccess(context).getConfiguration(number),
-                                           uuid, number, password, BuildConfig.SIGNAL_AGENT);
+                                           uuid, number, password, BuildConfig.SIGNAL_AGENT, FeatureFlags.okHttpAutomaticRetry());
   }
 
   /**
@@ -57,7 +55,7 @@ public class AccountManagerFactory {
     }
 
     return new SignalServiceAccountManager(new SignalServiceNetworkAccess(context).getConfiguration(number),
-                                           null, number, password, BuildConfig.SIGNAL_AGENT);
+                                           null, number, password, BuildConfig.SIGNAL_AGENT, FeatureFlags.okHttpAutomaticRetry());
   }
 
 }

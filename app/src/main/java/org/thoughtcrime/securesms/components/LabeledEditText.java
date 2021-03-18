@@ -3,8 +3,6 @@ package org.thoughtcrime.securesms.components;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Color;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.util.AttributeSet;
@@ -14,7 +12,11 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import org.thoughtcrime.securesms.R;
+import org.thoughtcrime.securesms.util.ViewUtil;
 
 public class LabeledEditText extends FrameLayout implements View.OnFocusChangeListener {
 
@@ -89,5 +91,9 @@ public class LabeledEditText extends FrameLayout implements View.OnFocusChangeLi
   public void setEnabled(boolean enabled) {
     super.setEnabled(enabled);
     input.setEnabled(enabled);
+  }
+
+  public void focusAndMoveCursorToEndAndOpenKeyboard() {
+    ViewUtil.focusAndMoveCursorToEndAndOpenKeyboard(input);
   }
 }

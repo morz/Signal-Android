@@ -21,13 +21,8 @@ import net.sqlcipher.database.SQLiteDatabase;
 import net.sqlcipher.database.SQLiteDatabaseHook;
 import net.sqlcipher.database.SQLiteOpenHelper;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.contacts.avatars.ContactColorsLegacy;
-import org.thoughtcrime.securesms.database.MentionDatabase;
-import org.thoughtcrime.securesms.database.RemappedRecordsDatabase;
-import org.thoughtcrime.securesms.profiles.AvatarHelper;
-import org.thoughtcrime.securesms.profiles.ProfileName;
-import org.thoughtcrime.securesms.recipients.RecipientId;
-import org.thoughtcrime.securesms.storage.StorageSyncHelper;
 import org.thoughtcrime.securesms.crypto.DatabaseSecret;
 import org.thoughtcrime.securesms.crypto.MasterSecret;
 import org.thoughtcrime.securesms.database.AttachmentDatabase;
@@ -38,38 +33,52 @@ import org.thoughtcrime.securesms.database.IdentityDatabase;
 import org.thoughtcrime.securesms.database.JobDatabase;
 import org.thoughtcrime.securesms.database.KeyValueDatabase;
 import org.thoughtcrime.securesms.database.MegaphoneDatabase;
+import org.thoughtcrime.securesms.database.MentionDatabase;
 import org.thoughtcrime.securesms.database.MmsDatabase;
 import org.thoughtcrime.securesms.database.OneTimePreKeyDatabase;
 import org.thoughtcrime.securesms.database.PushDatabase;
 import org.thoughtcrime.securesms.database.RecipientDatabase;
+import org.thoughtcrime.securesms.database.RemappedRecordsDatabase;
 import org.thoughtcrime.securesms.database.SearchDatabase;
 import org.thoughtcrime.securesms.database.SessionDatabase;
+import org.thoughtcrime.securesms.database.SignalDatabase;
 import org.thoughtcrime.securesms.database.SignedPreKeyDatabase;
 import org.thoughtcrime.securesms.database.SmsDatabase;
+import org.thoughtcrime.securesms.database.SqlCipherDatabaseHook;
 import org.thoughtcrime.securesms.database.StickerDatabase;
 import org.thoughtcrime.securesms.database.StorageKeyDatabase;
 import org.thoughtcrime.securesms.database.ThreadDatabase;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.groups.GroupId;
 import org.thoughtcrime.securesms.jobs.RefreshPreKeysJob;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.notifications.NotificationChannels;
 import org.thoughtcrime.securesms.phonenumbers.PhoneNumberFormatter;
+import org.thoughtcrime.securesms.profiles.AvatarHelper;
+import org.thoughtcrime.securesms.profiles.ProfileName;
+import org.thoughtcrime.securesms.recipients.RecipientId;
 import org.thoughtcrime.securesms.service.KeyCachingService;
+import org.thoughtcrime.securesms.storage.StorageSyncHelper;
 import org.thoughtcrime.securesms.util.Base64;
+import org.thoughtcrime.securesms.util.CursorUtil;
 import org.thoughtcrime.securesms.util.FileUtils;
+import org.thoughtcrime.securesms.util.Hex;
 import org.thoughtcrime.securesms.util.ServiceUtil;
 import org.thoughtcrime.securesms.util.SqlUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
+import org.thoughtcrime.securesms.util.Triple;
 import org.thoughtcrime.securesms.util.Util;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
-public class SQLCipherOpenHelper extends SQLiteOpenHelper {
+public class SQLCipherOpenHelper extends SQLiteOpenHelper implements SignalDatabase {
 
   @SuppressWarnings("unused")
   private static final String TAG = SQLCipherOpenHelper.class.getSimpleName();
@@ -146,27 +155,32 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
   private static final int UNKNOWN_STORAGE_FIELDS           = 71;
   private static final int STICKER_CONTENT_TYPE             = 72;
   private static final int STICKER_EMOJI_IN_NOTIFICATIONS   = 73;
+  private static final int THUMBNAIL_CLEANUP                = 74;
+  private static final int STICKER_CONTENT_TYPE_CLEANUP     = 75;
+  private static final int MENTION_CLEANUP                  = 76;
+  private static final int MENTION_CLEANUP_V2               = 77;
+  private static final int REACTION_CLEANUP                 = 78;
+  private static final int CAPABILITIES_REFACTOR            = 79;
+  private static final int GV1_MIGRATION                    = 80;
+  private static final int NOTIFIED_TIMESTAMP               = 81;
+  private static final int GV1_MIGRATION_LAST_SEEN          = 82;
+  private static final int VIEWED_RECEIPTS                  = 83;
+  private static final int CLEAN_UP_GV1_IDS                 = 84;
+  private static final int GV1_MIGRATION_REFACTOR           = 85;
+  private static final int CLEAR_PROFILE_KEY_CREDENTIALS    = 86;
+  private static final int LAST_RESET_SESSION_TIME          = 87;
+  private static final int WALLPAPER                        = 88;
+  private static final int ABOUT                            = 89;
+  private static final int SPLIT_SYSTEM_NAMES               = 90;
 
-  private static final int    DATABASE_VERSION = 73;
+  private static final int    DATABASE_VERSION = 90;
   private static final String DATABASE_NAME    = "signal.db";
 
   private final Context        context;
   private final DatabaseSecret databaseSecret;
 
   public SQLCipherOpenHelper(@NonNull Context context, @NonNull DatabaseSecret databaseSecret) {
-    super(context, DATABASE_NAME, null, DATABASE_VERSION, new SQLiteDatabaseHook() {
-      @Override
-      public void preKey(SQLiteDatabase db) {
-        db.rawExecSQL("PRAGMA cipher_default_kdf_iter = 1;");
-        db.rawExecSQL("PRAGMA cipher_default_page_size = 4096;");
-      }
-
-      @Override
-      public void postKey(SQLiteDatabase db) {
-        db.rawExecSQL("PRAGMA kdf_iter = '1';");
-        db.rawExecSQL("PRAGMA cipher_page_size = 4096;");
-      }
-    });
+    super(context, DATABASE_NAME, null, DATABASE_VERSION, new SqlCipherDatabaseHook());
 
     this.context        = context.getApplicationContext();
     this.databaseSecret = databaseSecret;
@@ -189,11 +203,8 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
     db.execSQL(SessionDatabase.CREATE_TABLE);
     db.execSQL(StickerDatabase.CREATE_TABLE);
     db.execSQL(StorageKeyDatabase.CREATE_TABLE);
-    db.execSQL(KeyValueDatabase.CREATE_TABLE);
-    db.execSQL(MegaphoneDatabase.CREATE_TABLE);
     db.execSQL(MentionDatabase.CREATE_TABLE);
     executeStatements(db, SearchDatabase.CREATE_TABLE);
-    executeStatements(db, JobDatabase.CREATE_TABLE);
     executeStatements(db, RemappedRecordsDatabase.CREATE_TABLE);
 
     executeStatements(db, RecipientDatabase.CREATE_INDEXS);
@@ -1023,6 +1034,237 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
         db.execSQL("ALTER TABLE part ADD COLUMN sticker_emoji TEXT DEFAULT NULL");
       }
 
+      if (oldVersion < THUMBNAIL_CLEANUP) {
+        int total   = 0;
+        int deleted = 0;
+
+        try (Cursor cursor = db.rawQuery("SELECT thumbnail FROM part WHERE thumbnail NOT NULL", null)) {
+          if (cursor != null) {
+            total = cursor.getCount();
+            Log.w(TAG, "Found " + total + " thumbnails to delete.");
+          }
+
+          while (cursor != null && cursor.moveToNext()) {
+            File file = new File(CursorUtil.requireString(cursor, "thumbnail"));
+
+            if (file.delete()) {
+              deleted++;
+            } else {
+              Log.w(TAG, "Failed to delete file! " + file.getAbsolutePath());
+            }
+          }
+        }
+
+        Log.w(TAG, "Deleted " + deleted + "/" + total + " thumbnail files.");
+      }
+
+      if (oldVersion < STICKER_CONTENT_TYPE_CLEANUP) {
+        ContentValues values = new ContentValues();
+        values.put("ct", "image/webp");
+
+        String query = "sticker_id NOT NULL AND (ct IS NULL OR ct = '')";
+
+        int rows = db.update("part", values, query, null);
+        Log.i(TAG, "Updated " + rows + " sticker attachment content types.");
+      }
+
+      if (oldVersion < MENTION_CLEANUP) {
+        String selectMentionIdsNotInGroupsV2 = "select mention._id from mention left join thread on mention.thread_id = thread._id left join recipient on thread.recipient_ids = recipient._id where recipient.group_type != 3";
+        db.delete("mention", "_id in (" + selectMentionIdsNotInGroupsV2 + ")", null);
+        db.delete("mention", "message_id NOT IN (SELECT _id FROM mms) OR thread_id NOT IN (SELECT _id from thread)", null);
+
+        List<Long> idsToDelete = new LinkedList<>();
+        try (Cursor cursor = db.rawQuery("select mention.*, mms.body from mention inner join mms on mention.message_id = mms._id", null)) {
+          while (cursor != null && cursor.moveToNext()) {
+            int    rangeStart  = CursorUtil.requireInt(cursor, "range_start");
+            int    rangeLength = CursorUtil.requireInt(cursor, "range_length");
+            String body        = CursorUtil.requireString(cursor, "body");
+
+            if (body == null || body.isEmpty() || rangeStart < 0 || rangeLength < 0 || (rangeStart + rangeLength) > body.length()) {
+              idsToDelete.add(CursorUtil.requireLong(cursor, "_id"));
+            }
+          }
+        }
+
+        if (Util.hasItems(idsToDelete)) {
+          String ids = TextUtils.join(",", idsToDelete);
+          db.delete("mention", "_id in (" + ids + ")", null);
+        }
+      }
+
+      if (oldVersion < MENTION_CLEANUP_V2) {
+        String selectMentionIdsWithMismatchingThreadIds = "select mention._id from mention left join mms on mention.message_id = mms._id where mention.thread_id != mms.thread_id";
+        db.delete("mention", "_id in (" + selectMentionIdsWithMismatchingThreadIds + ")", null);
+
+        List<Long>                          idsToDelete   = new LinkedList<>();
+        Set<Triple<Long, Integer, Integer>> mentionTuples = new HashSet<>();
+        try (Cursor cursor = db.rawQuery("select mention.*, mms.body from mention inner join mms on mention.message_id = mms._id order by mention._id desc", null)) {
+          while (cursor != null && cursor.moveToNext()) {
+            long   mentionId   = CursorUtil.requireLong(cursor, "_id");
+            long   messageId   = CursorUtil.requireLong(cursor, "message_id");
+            int    rangeStart  = CursorUtil.requireInt(cursor, "range_start");
+            int    rangeLength = CursorUtil.requireInt(cursor, "range_length");
+            String body        = CursorUtil.requireString(cursor, "body");
+
+            if (body != null && rangeStart < body.length() && body.charAt(rangeStart) != '\uFFFC') {
+              idsToDelete.add(mentionId);
+            } else {
+              Triple<Long, Integer, Integer> tuple = new Triple<>(messageId, rangeStart, rangeLength);
+              if (mentionTuples.contains(tuple)) {
+                idsToDelete.add(mentionId);
+              } else {
+                mentionTuples.add(tuple);
+              }
+            }
+          }
+
+          if (Util.hasItems(idsToDelete)) {
+            String ids = TextUtils.join(",", idsToDelete);
+            db.delete("mention", "_id in (" + ids + ")", null);
+          }
+        }
+      }
+
+      if (oldVersion < REACTION_CLEANUP) {
+        ContentValues values = new ContentValues();
+        values.putNull("reactions");
+        db.update("sms", values, "remote_deleted = ?", new String[] { "1" });
+      }
+
+      if (oldVersion < CAPABILITIES_REFACTOR) {
+        db.execSQL("ALTER TABLE recipient ADD COLUMN capabilities INTEGER DEFAULT 0");
+
+        db.execSQL("UPDATE recipient SET capabilities = 1 WHERE gv2_capability = 1");
+        db.execSQL("UPDATE recipient SET capabilities = 2 WHERE gv2_capability = -1");
+      }
+
+      if (oldVersion < GV1_MIGRATION) {
+        db.execSQL("ALTER TABLE groups ADD COLUMN expected_v2_id TEXT DEFAULT NULL");
+        db.execSQL("ALTER TABLE groups ADD COLUMN former_v1_members TEXT DEFAULT NULL");
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS expected_v2_id_index ON groups (expected_v2_id)");
+
+        int count = 0;
+        try (Cursor cursor = db.rawQuery("SELECT * FROM groups WHERE group_id LIKE '__textsecure_group__!%' AND LENGTH(group_id) = 53", null)) {
+          while (cursor.moveToNext()) {
+            String gv1 = CursorUtil.requireString(cursor, "group_id");
+            String gv2 = GroupId.parseOrThrow(gv1).requireV1().deriveV2MigrationGroupId().toString();
+
+            ContentValues values = new ContentValues();
+            values.put("expected_v2_id", gv2);
+            count += db.update("groups", values, "group_id = ?", SqlUtil.buildArgs(gv1));
+          }
+        }
+
+        Log.i(TAG, "Updated " + count + " GV1 groups with expected GV2 IDs.");
+      }
+
+      if (oldVersion < NOTIFIED_TIMESTAMP) {
+        db.execSQL("ALTER TABLE sms ADD COLUMN notified_timestamp INTEGER DEFAULT 0");
+        db.execSQL("ALTER TABLE mms ADD COLUMN notified_timestamp INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < GV1_MIGRATION_LAST_SEEN) {
+        db.execSQL("ALTER TABLE recipient ADD COLUMN last_gv1_migrate_reminder INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < VIEWED_RECEIPTS) {
+        db.execSQL("ALTER TABLE mms ADD COLUMN viewed_receipt_count INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < CLEAN_UP_GV1_IDS) {
+        List<String> deletableRecipients = new LinkedList<>();
+        try (Cursor cursor = db.rawQuery("SELECT _id, group_id FROM recipient\n" +
+                                         "WHERE group_id NOT IN (SELECT group_id FROM groups)\n" +
+                                         "AND group_id LIKE '__textsecure_group__!%' AND length(group_id) <> 53\n" +
+                                         "AND (_id NOT IN (SELECT recipient_ids FROM thread) OR _id IN (SELECT recipient_ids FROM thread WHERE message_count = 0))", null))
+        {
+          while (cursor.moveToNext()) {
+            String recipientId = cursor.getString(cursor.getColumnIndexOrThrow("_id"));
+            String groupIdV1   = cursor.getString(cursor.getColumnIndexOrThrow("group_id"));
+            deletableRecipients.add(recipientId);
+            Log.d(TAG, String.format(Locale.US, "Found invalid GV1 on %s with no or empty thread %s length %d", recipientId, groupIdV1, groupIdV1.length()));
+          }
+        }
+
+        for (String recipientId : deletableRecipients) {
+          db.delete("recipient", "_id = ?", new String[]{recipientId});
+          Log.d(TAG, "Deleted recipient " + recipientId);
+        }
+
+        List<String> orphanedThreads = new LinkedList<>();
+        try (Cursor cursor = db.rawQuery("SELECT _id FROM thread WHERE message_count = 0 AND recipient_ids NOT IN (SELECT _id FROM recipient)", null)) {
+          while (cursor.moveToNext()) {
+            orphanedThreads.add(cursor.getString(cursor.getColumnIndexOrThrow("_id")));
+          }
+        }
+
+        for (String orphanedThreadId : orphanedThreads) {
+          db.delete("thread", "_id = ?", new String[]{orphanedThreadId});
+          Log.d(TAG, "Deleted orphaned thread " + orphanedThreadId);
+        }
+
+        List<String> remainingInvalidGV1Recipients = new LinkedList<>();
+        try (Cursor cursor = db.rawQuery("SELECT _id, group_id FROM recipient\n" +
+                                         "WHERE group_id NOT IN (SELECT group_id FROM groups)\n" +
+                                         "AND group_id LIKE '__textsecure_group__!%' AND length(group_id) <> 53\n" +
+                                         "AND _id IN (SELECT recipient_ids FROM thread)", null))
+        {
+          while (cursor.moveToNext()) {
+            String recipientId = cursor.getString(cursor.getColumnIndexOrThrow("_id"));
+            String groupIdV1   = cursor.getString(cursor.getColumnIndexOrThrow("group_id"));
+            remainingInvalidGV1Recipients.add(recipientId);
+            Log.d(TAG, String.format(Locale.US, "Found invalid GV1 on %s with non-empty thread %s length %d", recipientId, groupIdV1, groupIdV1.length()));
+          }
+        }
+
+        for (String recipientId : remainingInvalidGV1Recipients) {
+          String        newId  = "__textsecure_group__!" + Hex.toStringCondensed(Util.getSecretBytes(16));
+          ContentValues values = new ContentValues(1);
+          values.put("group_id", newId);
+
+          db.update("recipient", values, "_id = ?", new String[] { String.valueOf(recipientId) });
+          Log.d(TAG, String.format("Replaced group id on recipient %s now %s", recipientId, newId));
+        }
+      }
+
+      if (oldVersion < GV1_MIGRATION_REFACTOR) {
+        ContentValues values = new ContentValues(1);
+        values.putNull("former_v1_members");
+
+        int count = db.update("groups", values, "former_v1_members NOT NULL", null);
+
+        Log.i(TAG, "Cleared former_v1_members for " + count + " rows");
+      }
+
+      if (oldVersion < CLEAR_PROFILE_KEY_CREDENTIALS) {
+        ContentValues values = new ContentValues(1);
+        values.putNull("profile_key_credential");
+
+        int count = db.update("recipient", values, "profile_key_credential NOT NULL", null);
+
+        Log.i(TAG, "Cleared profile key credentials for " + count + " rows");
+      }
+
+      if (oldVersion < LAST_RESET_SESSION_TIME) {
+        db.execSQL("ALTER TABLE recipient ADD COLUMN last_session_reset BLOB DEFAULT NULL");
+      }
+
+      if (oldVersion < WALLPAPER) {
+        db.execSQL("ALTER TABLE recipient ADD COLUMN wallpaper BLOB DEFAULT NULL");
+        db.execSQL("ALTER TABLE recipient ADD COLUMN wallpaper_file TEXT DEFAULT NULL");
+      }
+
+      if (oldVersion < ABOUT) {
+        db.execSQL("ALTER TABLE recipient ADD COLUMN about TEXT DEFAULT NULL");
+        db.execSQL("ALTER TABLE recipient ADD COLUMN about_emoji TEXT DEFAULT NULL");
+      }
+
+      if (oldVersion < SPLIT_SYSTEM_NAMES) {
+        db.execSQL("ALTER TABLE recipient ADD COLUMN system_family_name TEXT DEFAULT NULL");
+        db.execSQL("ALTER TABLE recipient ADD COLUMN system_given_name TEXT DEFAULT NULL");
+        db.execSQL("UPDATE recipient SET system_given_name = system_display_name");
+      }
+
       db.setTransactionSuccessful();
     } finally {
       db.endTransaction();
@@ -1035,12 +1277,17 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
     Log.i(TAG, "Upgrade complete. Took " + (System.currentTimeMillis() - startTime) + " ms.");
   }
 
-  public SQLiteDatabase getReadableDatabase() {
-    return getReadableDatabase(databaseSecret.asString());
+  public org.thoughtcrime.securesms.database.SQLiteDatabase getReadableDatabase() {
+    return new org.thoughtcrime.securesms.database.SQLiteDatabase(getReadableDatabase(databaseSecret.asString()));
   }
 
-  public SQLiteDatabase getWritableDatabase() {
-    return getWritableDatabase(databaseSecret.asString());
+  public org.thoughtcrime.securesms.database.SQLiteDatabase getWritableDatabase() {
+    return new org.thoughtcrime.securesms.database.SQLiteDatabase(getWritableDatabase(databaseSecret.asString()));
+  }
+
+  @Override
+  public @NonNull SQLiteDatabase getSqlCipherDatabase() {
+    return getWritableDatabase().getSqlCipherDatabase();
   }
 
   public void markCurrent(SQLiteDatabase db) {

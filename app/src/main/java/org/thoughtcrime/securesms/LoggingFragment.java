@@ -6,7 +6,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
-import org.thoughtcrime.securesms.logging.Log;
+import org.signal.core.util.logging.Log;
 
 /**
  * Simply logs out lifecycle events.
@@ -14,6 +14,12 @@ import org.thoughtcrime.securesms.logging.Log;
 public abstract class LoggingFragment extends Fragment {
 
   private static final String TAG = Log.tag(LoggingFragment.class);
+
+  public LoggingFragment() { }
+
+  public LoggingFragment(int contentLayoutId) {
+    super(contentLayoutId);
+  }
 
   @Override
   public void onCreate(@Nullable Bundle savedInstanceState) {

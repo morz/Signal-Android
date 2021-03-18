@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.ColorDrawable;
-import android.os.Build;
 import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.method.LinkMovementMethod;
@@ -35,7 +34,7 @@ import org.thoughtcrime.securesms.util.DynamicDarkActionBarTheme;
 import org.thoughtcrime.securesms.util.DynamicLanguage;
 import org.thoughtcrime.securesms.util.DynamicTheme;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.thoughtcrime.securesms.util.ThemeUtil;
+import org.thoughtcrime.securesms.util.WindowUtil;
 import org.thoughtcrime.securesms.util.views.Stub;
 
 import static org.thoughtcrime.securesms.util.ThemeUtil.isDarkTheme;
@@ -49,7 +48,7 @@ public class LongMessageActivity extends PassphraseRequiredActivity {
   private static final int MAX_DISPLAY_LENGTH = 64 * 1024;
 
   private final DynamicLanguage dynamicLanguage = new DynamicLanguage();
-  private final DynamicTheme    dynamicTheme    = new DynamicDarkActionBarTheme();
+  private final DynamicTheme    dynamicTheme    = new DynamicTheme();
 
   private Stub<ViewGroup> sentBubble;
   private Stub<ViewGroup> receivedBubble;
@@ -81,10 +80,6 @@ public class LongMessageActivity extends PassphraseRequiredActivity {
 
     initViewModel(getIntent().getLongExtra(KEY_MESSAGE_ID, -1), getIntent().getBooleanExtra(KEY_IS_MMS, false));
 
-    LiveRecipient conversationRecipient = Recipient.live(getIntent().getParcelableExtra(KEY_CONVERSATION_RECIPIENT));
-    conversationRecipient.observe(this, recipient -> updateActionBarColor(recipient.getColor()));
-    updateActionBarColor(conversationRecipient.get().getColor());
-
     getSupportActionBar().setDisplayHomeAsUpEnabled(true);
   }
 
@@ -106,14 +101,6 @@ public class LongMessageActivity extends PassphraseRequiredActivity {
     }
 
     return false;
-  }
-
-  private void updateActionBarColor(@NonNull MaterialColor color) {
-    getSupportActionBar().setBackgroundDrawable(new ColorDrawable(color.toActionBarColor(this)));
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-      getWindow().setStatusBarColor(color.toStatusBarColor(this));
-    }
   }
 
   private void initViewModel(long messageId, boolean isMms) {
@@ -142,7 +129,7 @@ public class LongMessageActivity extends PassphraseRequiredActivity {
 
       if (message.get().getMessageRecord().isOutgoing()) {
         bubble = sentBubble.get();
-        bubble.getBackground().setColorFilter(ThemeUtil.getThemedColor(this, R.attr.conversation_item_bubble_background), PorterDuff.Mode.MULTIPLY);
+        bubble.getBackground().setColorFilter(ContextCompat.getColor(this, R.color.signal_background_secondary), PorterDuff.Mode.MULTIPLY);
       } else {
         bubble = receivedBubble.get();
         bubble.getBackground().setColorFilter(message.get().getMessageRecord().getRecipient().getColor().toConversationColor(this), PorterDuff.Mode.MULTIPLY);

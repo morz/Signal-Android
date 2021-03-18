@@ -8,11 +8,10 @@ import android.net.Uri;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.contacts.TurnOffContactJoinedNotificationsActivity;
-import org.thoughtcrime.securesms.conversation.ConversationActivity;
-import org.thoughtcrime.securesms.conversation.ConversationPopupActivity;
+import org.thoughtcrime.securesms.conversation.ConversationIntents;
 import org.thoughtcrime.securesms.database.RecipientDatabase.VibrateState;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.recipients.Recipient;
 
 import java.util.Collection;
@@ -112,13 +111,16 @@ public class NotificationState {
   }
 
   public PendingIntent getMarkAsReadIntent(Context context, int notificationId) {
-    long[] threadArray = new long[threads.size()];
-    int    index       = 0;
+    long[]        threadArray  = new long[threads.size()];
+    int           index        = 0;
+    StringBuilder threadString = new StringBuilder();
 
     for (long thread : threads) {
-      Log.i(TAG, "Added thread: " + thread);
+      threadString.append(thread).append(" ");
       threadArray[index++] = thread;
     }
+
+    Log.i(TAG, "Added threads: " + threadString.toString());
 
     Intent intent = new Intent(MarkReadReceiver.CLEAR_ACTION);
     intent.setClass(context, MarkReadReceiver.class);
@@ -178,10 +180,9 @@ public class NotificationState {
   public PendingIntent getQuickReplyIntent(Context context, Recipient recipient) {
     if (threads.size() != 1) throw new AssertionError("We only support replies to single thread notifications! " + threads.size());
 
-    Intent     intent           = new Intent(context, ConversationPopupActivity.class);
-    intent.putExtra(ConversationActivity.RECIPIENT_EXTRA, recipient.getId());
-    intent.putExtra(ConversationActivity.THREAD_ID_EXTRA, (long)threads.toArray()[0]);
-    intent.setData((Uri.parse("custom://"+System.currentTimeMillis())));
+    Intent intent = ConversationIntents.createPopUpBuilder(context, recipient.getId(), (long) threads.toArray()[0])
+                                       .withDataUri(Uri.parse("custom://"+System.currentTimeMillis()))
+                                       .build();
 
     return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
   }
@@ -205,5 +206,8 @@ public class NotificationState {
     return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
   }
 
+  public boolean canReply() {
+    return notifications.size() >= 1 && notifications.get(0).canReply();
+  }
 
 }

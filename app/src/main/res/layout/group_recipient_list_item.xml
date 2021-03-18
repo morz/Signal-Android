@@ -22,7 +22,7 @@
         android:id="@+id/recipient_selected"
         android:layout_width="22dp"
         android:layout_height="22dp"
-        android:background="?attr/contact_selection_checkbox_background"
+        android:background="@drawable/contact_selection_checkbox"
         android:button="@null"
         android:clickable="false"
         android:focusable="false"
@@ -30,7 +30,7 @@
         app:layout_constraintEnd_toEndOf="@+id/recipient_avatar"
         tools:checked="true" />
 
-    <TextView
+    <org.thoughtcrime.securesms.components.emoji.EmojiTextView
         android:id="@+id/recipient_name"
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -39,12 +39,32 @@
         android:gravity="start|center_vertical"
         android:textAlignment="viewStart"
         android:textAppearance="@style/Signal.Text.Body"
-        app:layout_constraintBottom_toBottomOf="@+id/recipient_avatar"
+        app:layout_constraintBottom_toTopOf="@+id/recipient_about"
         app:layout_constraintEnd_toStartOf="@+id/admin"
         app:layout_constraintHorizontal_bias="0"
         app:layout_constraintStart_toEndOf="@+id/recipient_avatar"
         app:layout_constraintTop_toTopOf="@+id/recipient_avatar"
-        tools:text="@tools:sample/full_names" />
+        tools:text="Miles Morales" />
+
+    <org.thoughtcrime.securesms.components.emoji.EmojiTextView
+        android:id="@+id/recipient_about"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:gravity="start|center_vertical"
+        android:textAlignment="viewStart"
+        android:textAppearance="@style/Signal.Text.Preview"
+        android:textColor="@color/signal_text_secondary"
+        android:maxLines="1"
+        android:ellipsize="end"
+        app:layout_constraintBottom_toBottomOf="@+id/recipient_avatar"
+        app:layout_constraintEnd_toStartOf="@+id/admin"
+        app:layout_constraintHorizontal_bias="0"
+        app:layout_constraintStart_toEndOf="@+id/recipient_avatar"
+        app:layout_constraintTop_toBottomOf="@+id/recipient_name"
+        app:emoji_forceCustom="true"
+        tools:text="Hangin' around the web" />
 
     <TextView
         android:id="@+id/admin"
@@ -54,13 +74,13 @@
         android:gravity="start|center_vertical"
         android:text="@string/GroupRecipientListItem_admin"
         android:textAppearance="@style/TextAppearance.Signal.Subtitle2"
-        android:textColor="?attr/title_text_color_secondary"
+        android:textColor="@color/signal_text_secondary"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@+id/recipient_name"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/popupMenuProgressContainer"
         app:layout_constraintHorizontal_bias="0"
         app:layout_constraintStart_toEndOf="@+id/recipient_name"
-        app:layout_constraintTop_toTopOf="@+id/recipient_name"
+        app:layout_constraintTop_toTopOf="parent"
         tools:visibility="visible" />
 
     <FrameLayout
@@ -80,7 +100,7 @@
             android:layout_height="24dp"
             android:layout_marginEnd="16dp"
             android:visibility="gone"
-            app:background_tint="?title_text_color_primary"
+            app:background_tint="@color/signal_text_primary"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"

@@ -1,6 +1,5 @@
 package org.thoughtcrime.securesms.profiles.edit;
 
-import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.util.Consumer;
@@ -16,6 +15,7 @@ import org.thoughtcrime.securesms.util.StringUtil;
 import org.thoughtcrime.securesms.util.livedata.LiveDataUtil;
 import org.whispersystems.libsignal.util.guava.Optional;
 
+import java.util.Arrays;
 import java.util.Objects;
 
 class EditProfileViewModel extends ViewModel {
@@ -27,15 +27,16 @@ class EditProfileViewModel extends ViewModel {
   private final LiveData<ProfileName>             internalProfileName = LiveDataUtil.combineLatest(trimmedGivenName, trimmedFamilyName, ProfileName::fromParts);
   private final MutableLiveData<byte[]>           internalAvatar      = new MutableLiveData<>();
   private final MutableLiveData<byte[]>           originalAvatar      = new MutableLiveData<>();
-  private final MutableLiveData<Optional<String>> internalUsername    = new MutableLiveData<>();
   private final MutableLiveData<String>           originalDisplayName = new MutableLiveData<>();
-  private final LiveData<Boolean>                 isFormValid         = Transformations.map(trimmedGivenName, s -> s.length() > 0);
+  private final LiveData<Boolean>                 isFormValid;
   private final EditProfileRepository             repository;
   private final GroupId                           groupId;
 
   private EditProfileViewModel(@NonNull EditProfileRepository repository, boolean hasInstanceState, @Nullable GroupId groupId) {
-    this.repository = repository;
-    this.groupId    = groupId;
+    this.repository  = repository;
+    this.groupId     = groupId;
+    this.isFormValid = groupId != null && groupId.isMms() ? LiveDataUtil.just(true)
+                                                          : Transformations.map(trimmedGivenName, s -> s.length() > 0);
 
     if (!hasInstanceState) {
       if (groupId != null) {
@@ -75,10 +76,6 @@ class EditProfileViewModel extends ViewModel {
     return Transformations.distinctUntilChanged(internalAvatar);
   }
 
-  public LiveData<Optional<String>> username() {
-    return internalUsername;
-  }
-
   public boolean hasAvatar() {
     return internalAvatar.getValue() != null;
   }
@@ -91,11 +88,6 @@ class EditProfileViewModel extends ViewModel {
     return hasAvatar();
   }
 
-  @MainThread
-  public byte[] getAvatarSnapshot() {
-    return internalAvatar.getValue();
-  }
-
   public void setGivenName(String givenName) {
     this.givenName.setValue(givenName);
   }
@@ -106,10 +98,6 @@ class EditProfileViewModel extends ViewModel {
 
   public void setAvatar(byte[] avatar) {
     internalAvatar.setValue(avatar);
-  }
-
-  public void refreshUsername() {
-    repository.getCurrentUsername(internalUsername::postValue);
   }
 
   public void submitProfile(Consumer<EditProfileRepository.UploadResult> uploadResultConsumer) {
@@ -126,9 +114,9 @@ class EditProfileViewModel extends ViewModel {
 
     repository.uploadProfile(profileName,
                              displayName,
-                             !Objects.equals(oldDisplayName, displayName),
+                             !Objects.equals(StringUtil.stripBidiProtection(oldDisplayName), displayName),
                              newAvatar,
-                             oldAvatar != newAvatar,
+                             !Arrays.equals(oldAvatar, newAvatar),
                              uploadResultConsumer);
   }
 

@@ -18,7 +18,7 @@ import java.util.Objects;
 public final class ProfileName implements Parcelable {
 
   public static final ProfileName EMPTY           = new ProfileName("", "");
-  public static final int         MAX_PART_LENGTH = (ProfileCipher.NAME_PADDED_LENGTH - 1) / 2;
+  public static final int         MAX_PART_LENGTH = (ProfileCipher.MAX_POSSIBLE_NAME_LENGTH - 1) / 2;
 
   private final String givenName;
   private final String familyName;
@@ -90,6 +90,13 @@ public final class ProfileName implements Parcelable {
   }
 
   /**
+   * Creates a profile name that only contains a given name.
+   */
+  public static @NonNull ProfileName asGiven(@Nullable String givenName) {
+    return fromParts(givenName, null);
+  }
+
+  /**
    * Creates a profile name, trimming chars until it fits the limits.
    */
   public static @NonNull ProfileName fromParts(@Nullable String givenName, @Nullable String familyName) {
@@ -98,6 +105,10 @@ public final class ProfileName implements Parcelable {
 
     givenName  = StringUtil.trimToFit(givenName.trim(), ProfileName.MAX_PART_LENGTH);
     familyName = StringUtil.trimToFit(familyName.trim(), ProfileName.MAX_PART_LENGTH);
+
+    if (givenName.isEmpty() && familyName.isEmpty()) {
+      return EMPTY;
+    }
 
     return new ProfileName(givenName, familyName);
   }

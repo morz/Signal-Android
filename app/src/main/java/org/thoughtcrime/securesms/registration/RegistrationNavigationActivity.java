@@ -7,16 +7,19 @@ import android.content.IntentFilter;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 
 import com.google.android.gms.auth.api.phone.SmsRetriever;
 import com.google.android.gms.common.api.CommonStatusCodes;
 import com.google.android.gms.common.api.Status;
 
 import org.greenrobot.eventbus.EventBus;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.service.VerificationCodeParser;
+import org.thoughtcrime.securesms.util.CommunicationActions;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 public final class RegistrationNavigationActivity extends AppCompatActivity {
@@ -27,9 +30,16 @@ public final class RegistrationNavigationActivity extends AppCompatActivity {
 
   private SmsRetrieverReceiver smsRetrieverReceiver;
 
-  public static Intent newIntentForNewRegistration(@NonNull Context context) {
+  /**
+   */
+  public static Intent newIntentForNewRegistration(@NonNull Context context, @Nullable Intent originalIntent) {
     Intent intent = new Intent(context, RegistrationNavigationActivity.class);
     intent.putExtra(RE_REGISTRATION_EXTRA, false);
+
+    if (originalIntent != null) {
+      intent.setData(originalIntent.getData());
+    }
+
     return intent;
   }
 
@@ -40,10 +50,29 @@ public final class RegistrationNavigationActivity extends AppCompatActivity {
   }
 
   @Override
+  protected void attachBaseContext(@NonNull Context newBase) {
+    getDelegate().setLocalNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+    super.attachBaseContext(newBase);
+  }
+
+  @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_registration_navigation);
     initializeChallengeListener();
+
+    if (getIntent() != null && getIntent().getData() != null) {
+      CommunicationActions.handlePotentialProxyLinkUrl(this, getIntent().getDataString());
+    }
+  }
+
+  @Override
+  protected void onNewIntent(Intent intent) {
+    super.onNewIntent(intent);
+
+    if (intent.getData() != null) {
+      CommunicationActions.handlePotentialProxyLinkUrl(this, intent.getDataString());
+    }
   }
 
   @Override
@@ -77,7 +106,7 @@ public final class RegistrationNavigationActivity extends AppCompatActivity {
 
         switch (status.getStatusCode()) {
           case CommonStatusCodes.SUCCESS:
-            Optional<String> code = VerificationCodeParser.parse(context, (String) extras.get(SmsRetriever.EXTRA_SMS_MESSAGE));
+            Optional<String> code = VerificationCodeParser.parse((String) extras.get(SmsRetriever.EXTRA_SMS_MESSAGE));
             if (code.isPresent()) {
               Log.i(TAG, "Received verification code.");
               handleVerificationCodeReceived(code.get());

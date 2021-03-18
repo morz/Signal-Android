@@ -1,32 +1,30 @@
 package org.thoughtcrime.securesms.messages;
 
+import android.app.Application;
 import android.app.Service;
-import androidx.lifecycle.DefaultLifecycleObserver;
-import androidx.lifecycle.LifecycleOwner;
-import androidx.lifecycle.ProcessLifecycleOwner;
-
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.os.IBinder;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
-import org.thoughtcrime.securesms.messages.IncomingMessageProcessor.Processor;
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
-import org.thoughtcrime.securesms.jobmanager.ConstraintObserver;
-import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
-import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraintObserver;
-import org.thoughtcrime.securesms.logging.Log;
-
-import org.thoughtcrime.securesms.ApplicationContext;
+import org.signal.core.util.concurrent.SignalExecutors;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
+import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
+import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
+import org.thoughtcrime.securesms.jobs.PushDecryptDrainedJob;
+import org.thoughtcrime.securesms.keyvalue.SignalStore;
+import org.thoughtcrime.securesms.messages.IncomingMessageProcessor.Processor;
 import org.thoughtcrime.securesms.notifications.NotificationChannels;
 import org.thoughtcrime.securesms.push.SignalServiceNetworkAccess;
+import org.thoughtcrime.securesms.util.AppForegroundObserver;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.whispersystems.libsignal.InvalidVersionException;
 import org.whispersystems.libsignal.util.guava.Optional;
@@ -34,10 +32,12 @@ import org.whispersystems.signalservice.api.SignalServiceMessagePipe;
 import org.whispersystems.signalservice.api.SignalServiceMessageReceiver;
 import org.whispersystems.signalservice.api.messages.SignalServiceEnvelope;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class IncomingMessageObserver {
 
@@ -46,21 +46,29 @@ public class IncomingMessageObserver {
   public  static final  int FOREGROUND_ID            = 313399;
   private static final long REQUEST_TIMEOUT_MINUTES  = 1;
 
+  private static final AtomicInteger INSTANCE_COUNT = new AtomicInteger(0);
+
   private static SignalServiceMessagePipe pipe             = null;
   private static SignalServiceMessagePipe unidentifiedPipe = null;
 
-  private final Context                    context;
+  private final Application                context;
   private final SignalServiceNetworkAccess networkAccess;
-  private final List<Runnable>             websocketDrainedListeners;
+  private final List<Runnable>             decryptionDrainedListeners;
 
   private boolean appVisible;
 
-  private volatile boolean websocketDrained;
+  private volatile boolean networkDrained;
+  private volatile boolean decryptionDrained;
+  private volatile boolean terminated;
 
-  public IncomingMessageObserver(@NonNull Context context) {
-    this.context                   = context;
-    this.networkAccess             = ApplicationDependencies.getSignalServiceNetworkAccess();
-    this.websocketDrainedListeners = new CopyOnWriteArrayList<>();
+  public IncomingMessageObserver(@NonNull Application context) {
+    if (INSTANCE_COUNT.incrementAndGet() != 1) {
+      throw new AssertionError("Multiple observers!");
+    }
+
+    this.context                    = context;
+    this.networkAccess              = ApplicationDependencies.getSignalServiceNetworkAccess();
+    this.decryptionDrainedListeners = new CopyOnWriteArrayList<>();
 
     new MessageRetrievalThread().start();
 
@@ -68,14 +76,14 @@ public class IncomingMessageObserver {
       ContextCompat.startForegroundService(context, new Intent(context, ForegroundService.class));
     }
 
-    ProcessLifecycleOwner.get().getLifecycle().addObserver(new DefaultLifecycleObserver() {
+    ApplicationDependencies.getAppForegroundObserver().addListener(new AppForegroundObserver.Listener() {
       @Override
-      public void onStart(@NonNull LifecycleOwner owner) {
+      public void onForeground() {
         onAppForegrounded();
       }
 
       @Override
-      public void onStop(@NonNull LifecycleOwner owner) {
+      public void onBackground() {
         onAppBackgrounded();
       }
     });
@@ -86,7 +94,8 @@ public class IncomingMessageObserver {
         synchronized (IncomingMessageObserver.this) {
           if (!NetworkConstraint.isMet(context)) {
             Log.w(TAG, "Lost network connection. Shutting down our websocket connections and resetting the drained state.");
-            websocketDrained = false;
+            networkDrained    = false;
+            decryptionDrained = false;
             shutdown(pipe, unidentifiedPipe);
           }
           IncomingMessageObserver.this.notifyAll();
@@ -95,15 +104,35 @@ public class IncomingMessageObserver {
     }, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
   }
 
-  public synchronized void addWebsocketDrainedListener(@NonNull Runnable listener) {
-    websocketDrainedListeners.add(listener);
-    if (websocketDrained) {
+  public synchronized void notifyRegistrationChanged() {
+    notifyAll();
+  }
+
+  public synchronized void addDecryptionDrainedListener(@NonNull Runnable listener) {
+    decryptionDrainedListeners.add(listener);
+    if (decryptionDrained) {
       listener.run();
     }
   }
 
-  public boolean isWebsocketDrained() {
-    return websocketDrained;
+  public boolean isDecryptionDrained() {
+    return decryptionDrained || networkAccess.isCensored(context);
+  }
+
+  public void notifyDecryptionsDrained() {
+    List<Runnable> listenersToTrigger = new ArrayList<>(decryptionDrainedListeners.size());
+
+    synchronized (this) {
+      if (networkDrained && !decryptionDrained) {
+        Log.i(TAG, "Decryptions newly drained.");
+        decryptionDrained = true;
+        listenersToTrigger.addAll(decryptionDrainedListeners);
+      }
+    }
+
+    for (Runnable listener : listenersToTrigger) {
+      listener.run();
+    }
   }
 
   private synchronized void onAppForegrounded() {
@@ -121,9 +150,10 @@ public class IncomingMessageObserver {
     boolean websocketRegistered = TextSecurePreferences.isWebsocketRegistered(context);
     boolean isGcmDisabled       = TextSecurePreferences.isFcmDisabled(context);
     boolean hasNetwork          = NetworkConstraint.isMet(context);
+    boolean hasProxy            = SignalStore.proxy().isProxyEnabled();
 
-    Log.d(TAG, String.format("Network: %s, Foreground: %s, FCM: %s, Censored: %s, Registered: %s, Websocket Registered: %s",
-                             hasNetwork, appVisible, !isGcmDisabled, networkAccess.isCensored(context), registered, websocketRegistered));
+    Log.d(TAG, String.format("Network: %s, Foreground: %s, FCM: %s, Censored: %s, Registered: %s, Websocket Registered: %s, Proxy: %s",
+                             hasNetwork, appVisible, !isGcmDisabled, networkAccess.isCensored(context), registered, websocketRegistered, hasProxy));
 
     return registered                    &&
            websocketRegistered           &&
@@ -140,10 +170,23 @@ public class IncomingMessageObserver {
     }
   }
 
+  public void terminateAsync() {
+    INSTANCE_COUNT.decrementAndGet();
+
+    SignalExecutors.BOUNDED.execute(() -> {
+      Log.w(TAG, "Beginning termination.");
+      terminated = true;
+      shutdown(pipe, unidentifiedPipe);
+    });
+  }
+
   private void shutdown(@Nullable SignalServiceMessagePipe pipe, @Nullable SignalServiceMessagePipe unidentifiedPipe) {
     try {
       if (pipe != null) {
+        Log.w(TAG, "Shutting down normal pipe.");
         pipe.shutdown();
+      } else {
+        Log.w(TAG, "No need to shutdown normal pipe, it doesn't exist.");
       }
     } catch (Throwable t) {
       Log.w(TAG, "Closing normal pipe failed!", t);
@@ -151,7 +194,10 @@ public class IncomingMessageObserver {
 
     try {
       if (unidentifiedPipe != null) {
+        Log.w(TAG, "Shutting down unidentified pipe.");
         unidentifiedPipe.shutdown();
+      } else {
+        Log.w(TAG, "No need to shutdown unidentified pipe, it doesn't exist.");
       }
     } catch (Throwable t) {
       Log.w(TAG, "Closing unidentified pipe failed!", t);
@@ -170,12 +216,13 @@ public class IncomingMessageObserver {
 
     MessageRetrievalThread() {
       super("MessageRetrievalService");
+      Log.i(TAG, "Initializing! (" + this.hashCode() + ")");
       setUncaughtExceptionHandler(this);
     }
 
     @Override
     public void run() {
-      while (true) {
+      while (!terminated) {
         Log.i(TAG, "Waiting for websocket state change....");
         waitForConnectionNecessary();
 
@@ -199,18 +246,13 @@ public class IncomingMessageObserver {
                 }
               });
 
-              if (!result.isPresent() && !websocketDrained) {
-                Log.i(TAG, "Websocket was newly-drained. Triggering listeners.");
-                websocketDrained = true;
-
-                for (Runnable listener : websocketDrainedListeners) {
-                  listener.run();
-                }
+              if (!result.isPresent() && !networkDrained) {
+                Log.i(TAG, "Network was newly-drained. Enqueuing a job to listen for decryption draining.");
+                networkDrained = true;
+                ApplicationDependencies.getJobManager().add(new PushDecryptDrainedJob());
               }
             } catch (TimeoutException e) {
               Log.w(TAG, "Application level read timeout...");
-            } catch (InvalidVersionException e) {
-              Log.w(TAG, e);
             }
           }
         } catch (Throwable e) {
@@ -222,6 +264,8 @@ public class IncomingMessageObserver {
 
         Log.i(TAG, "Looping...");
       }
+
+      Log.w(TAG, "Terminated! (" + this.hashCode() + ")");
     }
 
     @Override

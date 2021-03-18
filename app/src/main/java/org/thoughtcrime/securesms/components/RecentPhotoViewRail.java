@@ -2,11 +2,19 @@ package org.thoughtcrime.securesms.components;
 
 
 import android.annotation.TargetApi;
+import android.content.ContentUris;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.util.AttributeSet;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.loader.app.LoaderManager;
@@ -14,12 +22,6 @@ import androidx.loader.content.Loader;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import android.util.AttributeSet;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.FrameLayout;
-import android.widget.ImageView;
 
 import com.bumptech.glide.load.Key;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
@@ -30,9 +32,6 @@ import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.database.CursorRecyclerViewAdapter;
 import org.thoughtcrime.securesms.database.loaders.RecentPhotosLoader;
 import org.thoughtcrime.securesms.mms.GlideApp;
-import org.thoughtcrime.securesms.util.ViewUtil;
-
-import java.io.File;
 
 public class RecentPhotoViewRail extends FrameLayout implements LoaderManager.LoaderCallbacks<Cursor> {
 
@@ -52,7 +51,7 @@ public class RecentPhotoViewRail extends FrameLayout implements LoaderManager.Lo
 
     inflate(context, R.layout.recent_photo_view, this);
 
-    this.recyclerView = ViewUtil.findById(this, R.id.photo_list);
+    this.recyclerView = findViewById(R.id.photo_list);
     this.recyclerView.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false));
     this.recyclerView.setItemAnimator(new DefaultItemAnimator());
   }
@@ -106,7 +105,7 @@ public class RecentPhotoViewRail extends FrameLayout implements LoaderManager.Lo
     public void onBindItemViewHolder(RecentPhotoViewHolder viewHolder, @NonNull Cursor cursor) {
       viewHolder.imageView.setImageDrawable(null);
 
-      String path         = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Images.ImageColumns.DATA));
+      long   rowId        = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.ImageColumns._ID));
       long   dateTaken    = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.ImageColumns.DATE_TAKEN));
       long   dateModified = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.ImageColumns.DATE_MODIFIED));
       String mimeType     = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Images.ImageColumns.MIME_TYPE));
@@ -116,7 +115,7 @@ public class RecentPhotoViewRail extends FrameLayout implements LoaderManager.Lo
       int    width        = cursor.getInt(cursor.getColumnIndexOrThrow(getWidthColumn(orientation)));
       int    height       = cursor.getInt(cursor.getColumnIndexOrThrow(getHeightColumn(orientation)));
 
-      final Uri uri = Uri.fromFile(new File(path));
+      final Uri uri = ContentUris.withAppendedId(RecentPhotosLoader.BASE_URL, rowId);
 
       Key signature = new MediaStoreSignature(mimeType, dateModified, orientation);
 
@@ -158,7 +157,7 @@ public class RecentPhotoViewRail extends FrameLayout implements LoaderManager.Lo
       RecentPhotoViewHolder(View itemView) {
         super(itemView);
 
-        this.imageView = ViewUtil.findById(itemView, R.id.thumbnail);
+        this.imageView = itemView.findViewById(R.id.thumbnail);
       }
     }
   }

@@ -18,7 +18,6 @@
 package org.thoughtcrime.securesms;
 
 import android.app.AlertDialog;
-import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.PorterDuff;
@@ -27,9 +26,9 @@ import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
-import androidx.fragment.app.FragmentTransaction;
 import androidx.preference.Preference;
 
 import org.thoughtcrime.securesms.help.HelpFragment;
@@ -37,22 +36,25 @@ import org.thoughtcrime.securesms.keyvalue.SignalStore;
 import org.thoughtcrime.securesms.preferences.AdvancedPreferenceFragment;
 import org.thoughtcrime.securesms.preferences.AppProtectionPreferenceFragment;
 import org.thoughtcrime.securesms.preferences.AppearancePreferenceFragment;
+import org.thoughtcrime.securesms.preferences.BackupsPreferenceFragment;
 import org.thoughtcrime.securesms.preferences.ChatsPreferenceFragment;
 import org.thoughtcrime.securesms.preferences.CorrectedPreferenceFragment;
+import org.thoughtcrime.securesms.preferences.DataAndStoragePreferenceFragment;
+import org.thoughtcrime.securesms.preferences.EditProxyFragment;
 import org.thoughtcrime.securesms.preferences.NotificationsPreferenceFragment;
 import org.thoughtcrime.securesms.preferences.SmsMmsPreferenceFragment;
-import org.thoughtcrime.securesms.preferences.StoragePreferenceFragment;
 import org.thoughtcrime.securesms.preferences.widgets.ProfilePreference;
 import org.thoughtcrime.securesms.preferences.widgets.UsernamePreference;
 import org.thoughtcrime.securesms.profiles.edit.EditProfileActivity;
+import org.thoughtcrime.securesms.profiles.manage.ManageProfileActivity;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.service.KeyCachingService;
+import org.thoughtcrime.securesms.util.CachedInflater;
 import org.thoughtcrime.securesms.util.CommunicationActions;
 import org.thoughtcrime.securesms.util.DynamicLanguage;
 import org.thoughtcrime.securesms.util.DynamicTheme;
 import org.thoughtcrime.securesms.util.FeatureFlags;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.thoughtcrime.securesms.util.ThemeUtil;
 
 /**
  * The Activity for application preference display and management.
@@ -64,6 +66,11 @@ import org.thoughtcrime.securesms.util.ThemeUtil;
 public class ApplicationPreferencesActivity extends PassphraseRequiredActivity
     implements SharedPreferences.OnSharedPreferenceChangeListener
 {
+  public static final String LAUNCH_TO_BACKUPS_FRAGMENT       = "launch.to.backups.fragment";
+  public static final String LAUNCH_TO_HELP_FRAGMENT          = "launch.to.help.fragment";
+  public static final String LAUNCH_TO_PROXY_FRAGMENT         = "launch.to.proxy.fragment";
+  public static final String LAUNCH_TO_NOTIFICATIONS_FRAGMENT = "launch.to.notifications.fragment";
+
   @SuppressWarnings("unused")
   private static final String TAG = ApplicationPreferencesActivity.class.getSimpleName();
 
@@ -80,8 +87,12 @@ public class ApplicationPreferencesActivity extends PassphraseRequiredActivity
   private static final String PREFERENCE_CATEGORY_ADVANCED       = "preference_category_advanced";
   private static final String PREFERENCE_CATEGORY_DONATE         = "preference_category_donate";
 
+  private static final String WAS_CONFIGURATION_UPDATED          = "was_configuration_updated";
+
   private final DynamicTheme    dynamicTheme    = new DynamicTheme();
   private final DynamicLanguage dynamicLanguage = new DynamicLanguage();
+
+  private boolean wasConfigurationUpdated = false;
 
   @Override
   protected void onPreCreate() {
@@ -96,9 +107,25 @@ public class ApplicationPreferencesActivity extends PassphraseRequiredActivity
 
     if (getIntent() != null && getIntent().getCategories() != null && getIntent().getCategories().contains("android.intent.category.NOTIFICATION_PREFERENCES")) {
       initFragment(android.R.id.content, new NotificationsPreferenceFragment());
+    } else if (getIntent() != null && getIntent().getBooleanExtra(LAUNCH_TO_BACKUPS_FRAGMENT, false)) {
+      initFragment(android.R.id.content, new BackupsPreferenceFragment());
+    } else if (getIntent() != null && getIntent().getBooleanExtra(LAUNCH_TO_HELP_FRAGMENT, false)) {
+      initFragment(android.R.id.content, new HelpFragment());
+    } else if (getIntent() != null && getIntent().getBooleanExtra(LAUNCH_TO_PROXY_FRAGMENT, false)) {
+      initFragment(android.R.id.content, EditProxyFragment.newInstance());
+    } else if (getIntent() != null && getIntent().getBooleanExtra(LAUNCH_TO_NOTIFICATIONS_FRAGMENT, false)) {
+      initFragment(android.R.id.content, new NotificationsPreferenceFragment());
     } else if (icicle == null) {
       initFragment(android.R.id.content, new ApplicationPreferenceFragment());
+    } else {
+      wasConfigurationUpdated = icicle.getBoolean(WAS_CONFIGURATION_UPDATED);
     }
+  }
+
+  @Override
+  protected void onSaveInstanceState(@NonNull Bundle outState) {
+    outState.putBoolean(WAS_CONFIGURATION_UPDATED, wasConfigurationUpdated);
+    super.onSaveInstanceState(outState);
   }
 
   @Override
@@ -122,20 +149,29 @@ public class ApplicationPreferencesActivity extends PassphraseRequiredActivity
     if (fragmentManager.getBackStackEntryCount() > 0) {
       fragmentManager.popBackStack();
     } else {
-      // TODO [greyson] Navigation
-      Intent intent = new Intent(this, MainActivity.class);
-      intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-      startActivity(intent);
+      if (wasConfigurationUpdated) {
+        setResult(MainActivity.RESULT_CONFIG_CHANGED);
+      } else {
+        setResult(RESULT_OK);
+      }
       finish();
     }
     return true;
   }
 
   @Override
+  public void onBackPressed() {
+    onSupportNavigateUp();
+  }
+
+  @Override
   public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
     if (key.equals(TextSecurePreferences.THEME_PREF)) {
+      DynamicTheme.setDefaultDayNightMode(this);
       recreate();
     } else if (key.equals(TextSecurePreferences.LANGUAGE_PREF)) {
+      CachedInflater.from(this).clear();
+      wasConfigurationUpdated = true;
       recreate();
 
       Intent intent = new Intent(this, KeyCachingService.class);
@@ -190,7 +226,7 @@ public class ApplicationPreferencesActivity extends PassphraseRequiredActivity
       if (Build.VERSION.SDK_INT >= 21) return;
 
       Preference preference = this.findPreference(PREFERENCE_CATEGORY_SMS_MMS);
-      preference.getIcon().setColorFilter(ThemeUtil.getThemedColor(requireContext(), R.attr.icon_tint), PorterDuff.Mode.SRC_IN);
+      preference.getIcon().setColorFilter(ContextCompat.getColor(requireContext(), R.color.signal_icon_tint_primary), PorterDuff.Mode.SRC_IN);
     }
 
     @Override
@@ -284,7 +320,7 @@ public class ApplicationPreferencesActivity extends PassphraseRequiredActivity
           fragment = new ChatsPreferenceFragment();
           break;
         case PREFERENCE_CATEGORY_STORAGE:
-          fragment = new StoragePreferenceFragment();
+          fragment = new DataAndStoragePreferenceFragment();
           break;
         case PREFERENCE_CATEGORY_DEVICES:
           Intent intent = new Intent(getActivity(), DeviceActivity.class);
@@ -317,7 +353,7 @@ public class ApplicationPreferencesActivity extends PassphraseRequiredActivity
     private class ProfileClickListener implements Preference.OnPreferenceClickListener {
       @Override
       public boolean onPreferenceClick(Preference preference) {
-        requireActivity().startActivity(EditProfileActivity.getIntentForUserProfileEdit(preference.getContext()));
+        requireActivity().startActivity(ManageProfileActivity.getIntent(requireActivity()));
         return true;
       }
     }
@@ -325,7 +361,7 @@ public class ApplicationPreferencesActivity extends PassphraseRequiredActivity
     private class UsernameClickListener implements Preference.OnPreferenceClickListener {
       @Override
       public boolean onPreferenceClick(Preference preference) {
-        requireActivity().startActivity(EditProfileActivity.getIntentForUsernameEdit(preference.getContext()));
+        requireActivity().startActivity(ManageProfileActivity.getIntentForUsernameEdit(preference.getContext()));
         return true;
       }
     }

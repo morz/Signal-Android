@@ -23,6 +23,7 @@ import org.whispersystems.signalservice.api.messages.calls.BusyMessage;
 import org.whispersystems.signalservice.api.messages.calls.HangupMessage;
 import org.whispersystems.signalservice.api.messages.calls.IceUpdateMessage;
 import org.whispersystems.signalservice.api.messages.calls.OfferMessage;
+import org.whispersystems.signalservice.api.messages.calls.OpaqueMessage;
 import org.whispersystems.signalservice.api.messages.calls.SignalServiceCallMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.BlockedListMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.ConfigurationMessage;
@@ -49,6 +50,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.whispersystems.signalservice.internal.push.SignalServiceProtos.GroupContext.Type.DELIVER;
 
@@ -340,17 +342,19 @@ public final class SignalServiceContent {
     }
 
 
-    List<SignalServiceAttachment>          attachments      = new LinkedList<>();
-    boolean                                endSession       = ((content.getFlags() & SignalServiceProtos.DataMessage.Flags.END_SESSION_VALUE            ) != 0);
-    boolean                                expirationUpdate = ((content.getFlags() & SignalServiceProtos.DataMessage.Flags.EXPIRATION_TIMER_UPDATE_VALUE) != 0);
-    boolean                                profileKeyUpdate = ((content.getFlags() & SignalServiceProtos.DataMessage.Flags.PROFILE_KEY_UPDATE_VALUE     ) != 0);
-    SignalServiceDataMessage.Quote         quote            = createQuote(content);
-    List<SharedContact>                    sharedContacts   = createSharedContacts(content);
-    List<SignalServiceDataMessage.Preview> previews         = createPreviews(content);
-    List<SignalServiceDataMessage.Mention> mentions         = createMentions(content);
-    SignalServiceDataMessage.Sticker       sticker          = createSticker(content);
-    SignalServiceDataMessage.Reaction      reaction         = createReaction(content);
-    SignalServiceDataMessage.RemoteDelete  remoteDelete     = createRemoteDelete(content);
+    List<SignalServiceAttachment>            attachments      = new LinkedList<>();
+    boolean                                  endSession       = ((content.getFlags() & SignalServiceProtos.DataMessage.Flags.END_SESSION_VALUE            ) != 0);
+    boolean                                  expirationUpdate = ((content.getFlags() & SignalServiceProtos.DataMessage.Flags.EXPIRATION_TIMER_UPDATE_VALUE) != 0);
+    boolean                                  profileKeyUpdate = ((content.getFlags() & SignalServiceProtos.DataMessage.Flags.PROFILE_KEY_UPDATE_VALUE     ) != 0);
+    boolean                                  isGroupV2        = groupInfoV2 != null;
+    SignalServiceDataMessage.Quote           quote            = createQuote(content, isGroupV2);
+    List<SharedContact>                      sharedContacts   = createSharedContacts(content);
+    List<SignalServiceDataMessage.Preview>   previews         = createPreviews(content);
+    List<SignalServiceDataMessage.Mention>   mentions         = createMentions(content.getBodyRangesList(), content.getBody(), isGroupV2);
+    SignalServiceDataMessage.Sticker         sticker          = createSticker(content);
+    SignalServiceDataMessage.Reaction        reaction         = createReaction(content);
+    SignalServiceDataMessage.RemoteDelete    remoteDelete     = createRemoteDelete(content);
+    SignalServiceDataMessage.GroupCallUpdate groupCallUpdate  = createGroupCallUpdate(content);
 
     if (content.getRequiredProtocolVersion() > SignalServiceProtos.DataMessage.ProtocolVersion.CURRENT_VALUE) {
       throw new UnsupportedDataMessageProtocolVersionException(SignalServiceProtos.DataMessage.ProtocolVersion.CURRENT_VALUE,
@@ -386,7 +390,8 @@ public final class SignalServiceContent {
                                         sticker,
                                         content.getIsViewOnce(),
                                         reaction,
-                                        remoteDelete);
+                                        remoteDelete,
+                                        groupCallUpdate);
   }
 
   private static SignalServiceSyncMessage createSynchronizeMessage(SignalServiceMetadata metadata,
@@ -614,6 +619,9 @@ public final class SignalServiceContent {
     } else if (content.hasBusy()) {
       SignalServiceProtos.CallMessage.Busy busy = content.getBusy();
       return SignalServiceCallMessage.forBusy(new BusyMessage(busy.getId()), isMultiRing, destinationDeviceId);
+    } else if (content.hasOpaque()) {
+      SignalServiceProtos.CallMessage.Opaque opaque = content.getOpaque();
+      return SignalServiceCallMessage.forOpaque(new OpaqueMessage(opaque.getData().toByteArray()), isMultiRing, destinationDeviceId);
     }
 
     return SignalServiceCallMessage.empty();
@@ -624,6 +632,7 @@ public final class SignalServiceContent {
 
     if      (content.getType() == SignalServiceProtos.ReceiptMessage.Type.DELIVERY) type = SignalServiceReceiptMessage.Type.DELIVERY;
     else if (content.getType() == SignalServiceProtos.ReceiptMessage.Type.READ)     type = SignalServiceReceiptMessage.Type.READ;
+    else if (content.getType() == SignalServiceProtos.ReceiptMessage.Type.VIEWED)   type = SignalServiceReceiptMessage.Type.VIEWED;
     else                                                        type = SignalServiceReceiptMessage.Type.UNKNOWN;
 
     return new SignalServiceReceiptMessage(type, content.getTimestampList(), metadata.getTimestamp());
@@ -647,7 +656,7 @@ public final class SignalServiceContent {
                                                                  Optional.<byte[]>absent());
   }
 
-  private static SignalServiceDataMessage.Quote createQuote(SignalServiceProtos.DataMessage content) throws ProtocolInvalidMessageException {
+  private static SignalServiceDataMessage.Quote createQuote(SignalServiceProtos.DataMessage content, boolean isGroupV2) throws ProtocolInvalidMessageException {
     if (!content.hasQuote()) return null;
 
     List<SignalServiceDataMessage.Quote.QuotedAttachment> attachments = new LinkedList<>();
@@ -665,7 +674,7 @@ public final class SignalServiceContent {
                                                 address,
                                                 content.getQuote().getText(),
                                                 attachments,
-                                                createMentions(content));
+                                                createMentions(content.getQuote().getBodyRangesList(), content.getQuote().getText(), isGroupV2));
     } else {
       Log.w(TAG, "Quote was missing an author! Returning null.");
       return null;
@@ -694,15 +703,17 @@ public final class SignalServiceContent {
     return results;
   }
 
-  private static List<SignalServiceDataMessage.Mention> createMentions(SignalServiceProtos.DataMessage content) throws ProtocolInvalidMessageException {
-    if (content.getBodyRangesCount() <= 0 || !content.hasBody()) return null;
+  private static List<SignalServiceDataMessage.Mention> createMentions(List<SignalServiceProtos.DataMessage.BodyRange> bodyRanges, String body, boolean isGroupV2) throws ProtocolInvalidMessageException {
+    if (bodyRanges == null || bodyRanges.isEmpty() || body == null) {
+      return null;
+    }
 
     List<SignalServiceDataMessage.Mention> mentions = new LinkedList<>();
 
-    for (SignalServiceProtos.DataMessage.BodyRange bodyRange : content.getBodyRangesList()) {
+    for (SignalServiceProtos.DataMessage.BodyRange bodyRange : bodyRanges) {
       if (bodyRange.hasMentionUuid()) {
         try {
-          validateBodyRange(content, bodyRange);
+          validateBodyRange(body, bodyRange);
           mentions.add(new SignalServiceDataMessage.Mention(UuidUtil.parseOrThrow(bodyRange.getMentionUuid()), bodyRange.getStart(), bodyRange.getLength()));
         } catch (IllegalArgumentException e) {
           throw new ProtocolInvalidMessageException(new InvalidMessageException(e), null, 0);
@@ -710,11 +721,15 @@ public final class SignalServiceContent {
       }
     }
 
+    if (mentions.size() > 0 && !isGroupV2) {
+      throw new ProtocolInvalidMessageException(new InvalidMessageException("Mentions received in non-GV2 message"), null, 0);
+    }
+
     return mentions;
   }
 
-  private static void validateBodyRange(SignalServiceProtos.DataMessage content, SignalServiceProtos.DataMessage.BodyRange bodyRange) throws ProtocolInvalidMessageException {
-    int incomingBodyLength = content.hasBody() ? content.getBody().length() : -1;
+  private static void validateBodyRange(String body, SignalServiceProtos.DataMessage.BodyRange bodyRange) throws ProtocolInvalidMessageException {
+    int incomingBodyLength = body != null ? body.length() : -1;
     int start              = bodyRange.hasStart() ? bodyRange.getStart() : -1;
     int length             = bodyRange.hasLength() ? bodyRange.getLength() : -1;
 
@@ -743,19 +758,25 @@ public final class SignalServiceContent {
   }
 
   private static SignalServiceDataMessage.Reaction createReaction(SignalServiceProtos.DataMessage content) {
-    if (!content.hasReaction()                                                                        ||
-        !content.getReaction().hasEmoji()                                                             ||
-        !(content.getReaction().hasTargetAuthorE164() || content.getReaction().hasTargetAuthorUuid()) ||
+    if (!content.hasReaction()                           ||
+        !content.getReaction().hasEmoji()                ||
+        !content.getReaction().hasTargetAuthorUuid()     ||
         !content.getReaction().hasTargetSentTimestamp())
     {
       return null;
     }
 
     SignalServiceProtos.DataMessage.Reaction reaction = content.getReaction();
+    UUID                                     uuid     = UuidUtil.parseOrNull(reaction.getTargetAuthorUuid());
+
+    if (uuid == null) {
+      Log.w(TAG, "Cannot parse author UUID on reaction");
+      return null;
+    }
 
     return new SignalServiceDataMessage.Reaction(reaction.getEmoji(),
                         reaction.getRemove(),
-                        new SignalServiceAddress(UuidUtil.parseOrNull(reaction.getTargetAuthorUuid()), reaction.getTargetAuthorE164()),
+                        new SignalServiceAddress(uuid, null),
                         reaction.getTargetSentTimestamp());
   }
 
@@ -767,6 +788,16 @@ public final class SignalServiceContent {
     SignalServiceProtos.DataMessage.Delete delete = content.getDelete();
 
     return new SignalServiceDataMessage.RemoteDelete(delete.getTargetSentTimestamp());
+  }
+
+  private static SignalServiceDataMessage.GroupCallUpdate createGroupCallUpdate(SignalServiceProtos.DataMessage content) {
+    if (!content.hasGroupCallUpdate()) {
+      return null;
+    }
+
+    SignalServiceProtos.DataMessage.GroupCallUpdate groupCallUpdate = content.getGroupCallUpdate();
+
+    return new SignalServiceDataMessage.GroupCallUpdate(groupCallUpdate.getEraId());
   }
 
   private static List<SharedContact> createSharedContacts(SignalServiceProtos.DataMessage content) throws ProtocolInvalidMessageException {

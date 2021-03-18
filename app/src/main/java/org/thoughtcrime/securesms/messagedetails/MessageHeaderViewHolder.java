@@ -8,19 +8,20 @@ import android.view.ViewStub;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.lifecycle.LifecycleOwner;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.signal.core.util.ThreadUtil;
+import org.signal.core.util.concurrent.SignalExecutors;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.conversation.ConversationItem;
 import org.thoughtcrime.securesms.conversation.ConversationMessage;
-import org.thoughtcrime.securesms.conversation.ConversationMessage.ConversationMessageFactory;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.mms.GlideRequests;
 import org.thoughtcrime.securesms.sms.MessageSender;
 import org.thoughtcrime.securesms.util.DateUtils;
 import org.thoughtcrime.securesms.util.ExpirationUtil;
-import org.thoughtcrime.securesms.util.Util;
-import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.sql.Date;
@@ -64,9 +65,9 @@ final class MessageHeaderViewHolder extends RecyclerView.ViewHolder {
     receivedStub    = itemView.findViewById(R.id.message_details_header_message_view_received_multimedia);
   }
 
-  void bind(ConversationMessage conversationMessage, boolean running) {
+  void bind(@NonNull LifecycleOwner lifecycleOwner, @Nullable ConversationMessage conversationMessage, boolean running) {
     MessageRecord messageRecord = conversationMessage.getMessageRecord();
-    bindMessageView(conversationMessage);
+    bindMessageView(lifecycleOwner, conversationMessage);
     bindErrorState(messageRecord);
     bindSentReceivedDates(messageRecord);
     bindExpirationTime(messageRecord, running);
@@ -77,7 +78,7 @@ final class MessageHeaderViewHolder extends RecyclerView.ViewHolder {
     bindExpirationTime(conversationMessage.getMessageRecord(), running);
   }
 
-  private void bindMessageView(ConversationMessage conversationMessage) {
+  private void bindMessageView(@NonNull LifecycleOwner lifecycleOwner, @Nullable ConversationMessage conversationMessage) {
     if (conversationItem == null) {
       if (conversationMessage.getMessageRecord().isGroupAction()) {
         conversationItem = (ConversationItem) updateStub.inflate();
@@ -87,7 +88,7 @@ final class MessageHeaderViewHolder extends RecyclerView.ViewHolder {
         conversationItem = (ConversationItem) receivedStub.inflate();
       }
     }
-    conversationItem.bind(conversationMessage, Optional.absent(), Optional.absent(), glideRequests, Locale.getDefault(), new HashSet<>(), conversationMessage.getMessageRecord().getRecipient(), null, false);
+    conversationItem.bind(lifecycleOwner, conversationMessage, Optional.absent(), Optional.absent(), glideRequests, Locale.getDefault(), new HashSet<>(), conversationMessage.getMessageRecord().getRecipient(), null, false, false, false);
   }
 
   private void bindErrorState(MessageRecord messageRecord) {
@@ -155,7 +156,7 @@ final class MessageHeaderViewHolder extends RecyclerView.ViewHolder {
     expiresGroup.setVisibility(View.VISIBLE);
     if (running) {
       expiresUpdater = new ExpiresUpdater(messageRecord);
-      Util.runOnMain(expiresUpdater);
+      ThreadUtil.runOnMain(expiresUpdater);
     }
   }
 
@@ -202,7 +203,7 @@ final class MessageHeaderViewHolder extends RecyclerView.ViewHolder {
       expiresIn.setText(duration);
 
       if (running && expirationTime > 1) {
-        Util.runOnMainDelayed(this, 500);
+        ThreadUtil.runOnMainDelayed(this, 500);
       }
     }
 

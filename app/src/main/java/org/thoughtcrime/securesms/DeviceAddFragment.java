@@ -5,8 +5,6 @@ import android.annotation.TargetApi;
 import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
-import androidx.annotation.NonNull;
-
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewAnimationUtils;
@@ -14,6 +12,8 @@ import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+
+import androidx.annotation.NonNull;
 
 import org.thoughtcrime.securesms.components.camera.CameraView;
 import org.thoughtcrime.securesms.qr.ScanListener;
@@ -32,9 +32,9 @@ public class DeviceAddFragment extends LoggingFragment {
   @Override
   public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup viewGroup, Bundle bundle) {
     this.container    = ViewUtil.inflate(inflater, viewGroup, R.layout.device_add_fragment);
-    this.overlay      = ViewUtil.findById(this.container, R.id.overlay);
-    this.scannerView  = ViewUtil.findById(this.container, R.id.scanner);
-    this.devicesImage = ViewUtil.findById(this.container, R.id.devices);
+    this.overlay      = this.container.findViewById(R.id.overlay);
+    this.scannerView  = this.container.findViewById(R.id.scanner);
+    this.devicesImage = this.container.findViewById(R.id.devices);
 
     if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
       this.overlay.setOrientation(LinearLayout.HORIZONTAL);

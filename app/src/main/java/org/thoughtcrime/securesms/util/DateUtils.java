@@ -16,15 +16,20 @@
  */
 package org.thoughtcrime.securesms.util;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
+import android.os.Build;
 import android.text.format.DateFormat;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
 
+import java.text.DateFormatSymbols;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
@@ -35,8 +40,9 @@ import java.util.concurrent.TimeUnit;
 public class DateUtils extends android.text.format.DateUtils {
 
   @SuppressWarnings("unused")
-  private static final String           TAG         = DateUtils.class.getSimpleName();
-  private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyyMMdd");
+  private static final String                        TAG                = DateUtils.class.getSimpleName();
+  private static final ThreadLocal<SimpleDateFormat> DATE_FORMAT        = new ThreadLocal<>();
+  private static final ThreadLocal<SimpleDateFormat> BRIEF_EXACT_FORMAT = new ThreadLocal<>();
 
   private static boolean isWithin(final long millis, final long span, final TimeUnit unit) {
     return System.currentTimeMillis() - millis <= unit.toMillis(span);
@@ -56,7 +62,7 @@ public class DateUtils extends android.text.format.DateUtils {
 
   private static String getFormattedDateTime(long time, String template, Locale locale) {
     final String localizedPattern = getLocalizedPattern(template, locale);
-    return new SimpleDateFormat(localizedPattern, locale).format(new Date(time));
+    return setLowercaseAmPmStrings(new SimpleDateFormat(localizedPattern, locale), locale).format(new Date(time));
   }
 
   public static String getBriefRelativeTimeSpanString(final Context c, final Locale locale, final long timestamp) {
@@ -160,7 +166,10 @@ public class DateUtils extends android.text.format.DateUtils {
   }
 
   public static boolean isSameDay(long t1, long t2) {
-    return DATE_FORMAT.format(new Date(t1)).equals(DATE_FORMAT.format(new Date(t2)));
+    String d1 = getDateFormat().format(new Date(t1));
+    String d2 = getDateFormat().format(new Date(t2));
+
+    return d1.equals(d2);
   }
 
   public static boolean isSameExtendedRelativeTimestamp(@NonNull Context context, @NonNull Locale locale, long t1, long t2) {
@@ -169,5 +178,67 @@ public class DateUtils extends android.text.format.DateUtils {
 
   private static String getLocalizedPattern(String template, Locale locale) {
     return DateFormat.getBestDateTimePattern(locale, template);
+  }
+
+  private static @NonNull SimpleDateFormat setLowercaseAmPmStrings(@NonNull SimpleDateFormat format, @NonNull Locale locale) {
+    DateFormatSymbols symbols = new DateFormatSymbols(locale);
+
+    symbols.setAmPmStrings(new String[] { "am", "pm"});
+    format.setDateFormatSymbols(symbols);
+
+    return format;
+  }
+
+  /**
+   * e.g. 2020-09-04T19:17:51Z
+   * https://www.iso.org/iso-8601-date-and-time-format.html
+   *
+   * Note: SDK_INT == 0 check needed to pass unit tests due to JVM date parser differences.
+   *
+   * @return The timestamp if able to be parsed, otherwise -1.
+   */
+  @SuppressLint("ObsoleteSdkInt")
+  public static long parseIso8601(@Nullable String date) {
+    SimpleDateFormat format;
+    if (Build.VERSION.SDK_INT == 0 || Build.VERSION.SDK_INT >= 24) {
+      format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX", Locale.getDefault());
+    } else {
+      format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.getDefault());
+    }
+
+    if (Util.isEmpty(date)) {
+      return -1;
+    }
+
+    try {
+      return format.parse(date).getTime();
+    } catch (ParseException e) {
+      Log.w(TAG, "Failed to parse date.", e);
+      return -1;
+    }
+  }
+
+  @SuppressLint("SimpleDateFormat")
+  private static SimpleDateFormat getDateFormat() {
+    SimpleDateFormat format = DATE_FORMAT.get();
+
+    if (format == null) {
+      format = new SimpleDateFormat("yyyyMMdd");
+      DATE_FORMAT.set(format);
+    }
+
+    return format;
+  }
+
+  @SuppressLint("SimpleDateFormat")
+  private static SimpleDateFormat getBriefExactFormat() {
+    SimpleDateFormat format = BRIEF_EXACT_FORMAT.get();
+
+    if (format == null) {
+      format = new SimpleDateFormat();
+      BRIEF_EXACT_FORMAT.set(format);
+    }
+
+    return format;
   }
 }

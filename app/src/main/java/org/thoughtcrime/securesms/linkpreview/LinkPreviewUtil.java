@@ -1,33 +1,30 @@
 package org.thoughtcrime.securesms.linkpreview;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
-
 import android.annotation.SuppressLint;
-import android.os.Build;
 import android.text.Html;
 import android.text.SpannableString;
 import android.text.TextUtils;
 import android.text.style.URLSpan;
 import android.text.util.Linkify;
 
-import com.annimon.stream.Stream;
-import com.google.android.collect.Sets;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
-import org.thoughtcrime.securesms.logging.Log;
+import com.annimon.stream.Collectors;
+import com.annimon.stream.Stream;
+
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.stickers.StickerUrl;
+import org.thoughtcrime.securesms.util.DateUtils;
+import org.thoughtcrime.securesms.util.SetUtil;
 import org.thoughtcrime.securesms.util.Util;
 import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.signalservice.api.util.OptionalUtil;
 
-import java.text.DateFormat;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -49,23 +46,23 @@ public final class LinkPreviewUtil {
   private static final Pattern FAVICON_PATTERN            = Pattern.compile("<\\s*link[^>]*rel\\s*=\\s*\".*icon.*\"[^>]*>");
   private static final Pattern FAVICON_HREF_PATTERN       = Pattern.compile("href\\s*=\\s*\"([^\"]*)\"");
 
-  private static final Set<String> INVALID_TOP_LEVEL_DOMAINS = Sets.newHashSet("onion", "i2p");
+  private static final Set<String> INVALID_TOP_LEVEL_DOMAINS = SetUtil.newHashSet("onion", "i2p");
 
   /**
    * @return All whitelisted URLs in the source text.
    */
-  public static @NonNull List<Link> findValidPreviewUrls(@NonNull String text) {
+  public static @NonNull Links findValidPreviewUrls(@NonNull String text) {
     SpannableString spannable = new SpannableString(text);
     boolean         found     = Linkify.addLinks(spannable, Linkify.WEB_URLS);
 
     if (!found) {
-      return Collections.emptyList();
+      return Links.EMPTY;
     }
 
-    return Stream.of(spannable.getSpans(0, spannable.length(), URLSpan.class))
-                 .map(span -> new Link(span.getURL(), spannable.getSpanStart(span)))
-                 .filter(link -> isValidPreviewUrl(link.getUrl()))
-                 .toList();
+    return new Links(Stream.of(spannable.getSpans(0, spannable.length(), URLSpan.class))
+                           .map(span -> new Link(span.getURL(), spannable.getSpanStart(span)))
+                           .filter(link -> isValidPreviewUrl(link.getUrl()))
+                           .toList());
   }
 
   /**
@@ -147,7 +144,7 @@ public final class LinkPreviewUtil {
 
     Matcher titleMatcher = TITLE_PATTERN.matcher(html);
     if (titleMatcher.find() && titleMatcher.groupCount() > 0) {
-      htmlTitle = titleMatcher.group(1);
+      htmlTitle = htmlDecoder.fromEncoded(titleMatcher.group(1));
     }
 
     Matcher faviconMatcher = FAVICON_PATTERN.matcher(html);
@@ -203,18 +200,11 @@ public final class LinkPreviewUtil {
 
     @SuppressLint("ObsoleteSdkInt")
     public long getDate() {
-      SimpleDateFormat format;
-      if (Build.VERSION.SDK_INT == 0 || Build.VERSION.SDK_INT >= 24) {
-        format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX", Locale.getDefault());
-      } else {
-        format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.getDefault());
-      }
-
       return Stream.of(values.get(KEY_PUBLISHED_TIME_1),
                        values.get(KEY_PUBLISHED_TIME_2),
                        values.get(KEY_MODIFIED_TIME_1),
                        values.get(KEY_MODIFIED_TIME_2))
-                   .map(dateString -> parseDate(format, dateString))
+                   .map(DateUtils::parseIso8601)
                    .filter(time -> time > 0)
                    .findFirst()
                    .orElse(0L);
@@ -223,22 +213,44 @@ public final class LinkPreviewUtil {
     public @NonNull Optional<String> getDescription() {
       return OptionalUtil.absentIfEmpty(values.get(KEY_DESCRIPTION_URL));
     }
-
-    private static long parseDate(DateFormat dateFormat, String dateString) {
-      if (Util.isEmpty(dateString)) {
-        return 0;
-      }
-
-      try {
-        return dateFormat.parse(dateString).getTime();
-      } catch (ParseException e) {
-        Log.w(TAG, "Failed to parse date.", e);
-        return 0;
-      }
-    }
   }
 
   public interface HtmlDecoder {
     @NonNull String fromEncoded(@NonNull String html);
+  }
+
+  public static class Links {
+    static final Links EMPTY = new Links(Collections.emptyList());
+
+    private final List<Link>  links;
+    private final Set<String> urlSet;
+
+    private Links(@NonNull List<Link> links) {
+      this.links  = links;
+      this.urlSet = Stream.of(links)
+                          .map(link -> trimTrailingSlash(link.getUrl()))
+                          .collect(Collectors.toSet());
+    }
+
+    public Optional<Link> findFirst() {
+      return links.isEmpty() ? Optional.absent()
+                             : Optional.of(links.get(0));
+    }
+
+    /**
+     * Slightly forgiving comparison where it will ignore trailing '/' on the supplied url.
+     */
+    public boolean containsUrl(@NonNull String url) {
+      return urlSet.contains(trimTrailingSlash(url));
+    }
+
+    private @NonNull String trimTrailingSlash(@NonNull String url) {
+      return url.endsWith("/") ? url.substring(0, url.length() - 1)
+                               : url;
+    }
+
+    public int size() {
+      return links.size();
+    }
   }
 }

@@ -1,27 +1,29 @@
 package org.thoughtcrime.securesms.stickers;
 
-import androidx.lifecycle.ViewModelProviders;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.os.Bundle;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.Px;
-import androidx.fragment.app.Fragment;
-import androidx.recyclerview.widget.GridLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.Px;
+import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProviders;
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.model.StickerRecord;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.DecryptableStreamUriLoader;
 import org.thoughtcrime.securesms.mms.GlideApp;
 import org.thoughtcrime.securesms.mms.GlideRequests;
 import org.thoughtcrime.securesms.stickers.StickerKeyboardPageAdapter.StickerKeyboardPageViewHolder;
+import org.thoughtcrime.securesms.util.DeviceProperties;
 import org.whispersystems.libsignal.util.Pair;
 
 /**
@@ -68,7 +70,7 @@ public final class StickerKeyboardPageFragment extends Fragment implements Stick
     GlideRequests glideRequests = GlideApp.with(this);
 
     this.list              = view.findViewById(R.id.sticker_keyboard_list);
-    this.adapter           = new StickerKeyboardPageAdapter(glideRequests, this);
+    this.adapter           = new StickerKeyboardPageAdapter(glideRequests, this, DeviceProperties.shouldAllowApngStickerAnimation(requireContext()));
     this.layoutManager     = new GridLayoutManager(requireContext(), 2);
     this.listTouchListener = new StickerRolloverTouchListener(requireContext(), glideRequests, eventListener, this);
     this.packId            = getArguments().getString(KEY_PACK_ID);

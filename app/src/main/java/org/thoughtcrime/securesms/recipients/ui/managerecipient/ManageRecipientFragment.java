@@ -27,6 +27,7 @@ import androidx.lifecycle.ViewModelProviders;
 import com.takisoft.colorpicker.ColorPickerDialog;
 import com.takisoft.colorpicker.ColorStateDrawable;
 
+import org.signal.core.util.concurrent.SignalExecutors;
 import org.thoughtcrime.securesms.AvatarPreviewActivity;
 import org.thoughtcrime.securesms.LoggingFragment;
 import org.thoughtcrime.securesms.MediaPreviewActivity;
@@ -38,6 +39,7 @@ import org.thoughtcrime.securesms.components.AvatarImageView;
 import org.thoughtcrime.securesms.components.ThreadPhotoRailView;
 import org.thoughtcrime.securesms.contacts.avatars.FallbackContactPhoto;
 import org.thoughtcrime.securesms.contacts.avatars.FallbackPhoto80dp;
+import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.groups.ui.GroupMemberListView;
 import org.thoughtcrime.securesms.keyvalue.SignalStore;
 import org.thoughtcrime.securesms.mediaoverview.MediaOverviewActivity;
@@ -52,6 +54,8 @@ import org.thoughtcrime.securesms.util.DateUtils;
 import org.thoughtcrime.securesms.util.LifecycleCursorWrapper;
 import org.thoughtcrime.securesms.util.ServiceUtil;
 import org.thoughtcrime.securesms.util.Util;
+import org.thoughtcrime.securesms.util.ViewUtil;
+import org.thoughtcrime.securesms.wallpaper.ChatWallpaperActivity;
 
 import java.util.Locale;
 import java.util.Objects;
@@ -68,8 +72,11 @@ public class ManageRecipientFragment extends LoggingFragment {
   private GroupMemberListView                    sharedGroupList;
   private Toolbar                                toolbar;
   private TextView                               title;
+  private TextView                               about;
   private TextView                               subtitle;
-  private TextView                               internalDetails;
+  private ViewGroup                              internalDetails;
+  private TextView                               internalDetailsText;
+  private View                                   disableProfileSharingButton;
   private View                                   contactRow;
   private TextView                               contactText;
   private ImageView                              contactIcon;
@@ -101,6 +108,7 @@ public class ManageRecipientFragment extends LoggingFragment {
   private View                                   secureCallButton;
   private View                                   insecureCallButton;
   private View                                   secureVideoCallButton;
+  private View                                   chatWallpaperButton;
 
   static ManageRecipientFragment newInstance(@NonNull RecipientId recipientId, boolean fromConversation) {
     ManageRecipientFragment fragment = new ManageRecipientFragment();
@@ -126,8 +134,11 @@ public class ManageRecipientFragment extends LoggingFragment {
     contactText                 = view.findViewById(R.id.recipient_contact_text);
     contactIcon                 = view.findViewById(R.id.recipient_contact_icon);
     title                       = view.findViewById(R.id.name);
+    about                       = view.findViewById(R.id.about);
     subtitle                    = view.findViewById(R.id.username_number);
     internalDetails             = view.findViewById(R.id.recipient_internal_details);
+    internalDetailsText         = view.findViewById(R.id.recipient_internal_details_text);
+    disableProfileSharingButton = view.findViewById(R.id.recipient_internal_details_disable_profile_sharing_button);
     sharedGroupList             = view.findViewById(R.id.shared_group_list);
     groupsInCommonCount         = view.findViewById(R.id.groups_in_common_count);
     threadPhotoRailView         = view.findViewById(R.id.recent_photos);
@@ -155,6 +166,7 @@ public class ManageRecipientFragment extends LoggingFragment {
     secureCallButton            = view.findViewById(R.id.recipient_voice_call);
     insecureCallButton          = view.findViewById(R.id.recipient_insecure_voice_call);
     secureVideoCallButton       = view.findViewById(R.id.recipient_video_call);
+    chatWallpaperButton         = view.findViewById(R.id.chat_wallpaper);
 
     return view;
   }
@@ -218,7 +230,10 @@ public class ManageRecipientFragment extends LoggingFragment {
     viewModel.getCanAddToAGroup().observe(getViewLifecycleOwner(), canAdd -> addToAGroup.setVisibility(canAdd ? View.VISIBLE : View.GONE));
 
     if (SignalStore.internalValues().recipientDetails()) {
-      viewModel.getInternalDetails().observe(getViewLifecycleOwner(), internalDetails::setText);
+      viewModel.getInternalDetails().observe(getViewLifecycleOwner(), internalDetailsText::setText);
+      disableProfileSharingButton.setOnClickListener(v -> {
+        SignalExecutors.BOUNDED.execute(() -> DatabaseFactory.getRecipientDatabase(requireContext()).setProfileSharing(recipientId, false));
+      });
       internalDetails.setVisibility(View.VISIBLE);
     } else {
       internalDetails.setVisibility(View.GONE);
@@ -246,10 +261,11 @@ public class ManageRecipientFragment extends LoggingFragment {
       });
     }
 
-    viewModel.getCanBlock().observe(getViewLifecycleOwner(), canBlock -> {
-      block.setVisibility(canBlock ? View.VISIBLE : View.GONE);
-      unblock.setVisibility(canBlock ? View.GONE : View.VISIBLE);
-    });
+    viewModel.getCanBlock().observe(getViewLifecycleOwner(),
+                                    canBlock -> block.setVisibility(canBlock ? View.VISIBLE : View.GONE));
+
+    viewModel.getCanUnblock().observe(getViewLifecycleOwner(),
+                                      canUnblock -> unblock.setVisibility(canUnblock ? View.VISIBLE : View.GONE));
 
     messageButton.setOnClickListener(v -> {
       if (fromConversation) {
@@ -261,6 +277,7 @@ public class ManageRecipientFragment extends LoggingFragment {
     secureCallButton.setOnClickListener(v -> viewModel.onSecureCall(requireActivity()));
     insecureCallButton.setOnClickListener(v -> viewModel.onInsecureCall(requireActivity()));
     secureVideoCallButton.setOnClickListener(v -> viewModel.onSecureVideoCall(requireActivity()));
+    chatWallpaperButton.setOnClickListener(v -> startActivity(ChatWallpaperActivity.createIntent(requireContext(), recipientId)));
   }
 
   @Override
@@ -290,6 +307,10 @@ public class ManageRecipientFragment extends LoggingFragment {
       });
     }
 
+    String aboutText = recipient.getCombinedAboutAndEmoji();
+    about.setText(aboutText);
+    about.setVisibility(Util.isEmpty(aboutText) ? View.GONE : View.VISIBLE);
+
     disappearingMessagesCard.setVisibility(recipient.isRegistered() ? View.VISIBLE : View.GONE);
     addToAGroup.setVisibility(recipient.isRegistered() ? View.VISIBLE : View.GONE);
 
@@ -297,12 +318,12 @@ public class ManageRecipientFragment extends LoggingFragment {
     avatar.setFallbackPhotoProvider(new Recipient.FallbackPhotoProvider() {
       @Override
       public @NonNull FallbackContactPhoto getPhotoForRecipientWithoutName() {
-        return new FallbackPhoto80dp(R.drawable.ic_profile_80, recipientColor);
+        return new FallbackPhoto80dp(R.drawable.ic_profile_80, recipientColor.toAvatarColor(requireContext()));
       }
 
       @Override
       public @NonNull FallbackContactPhoto getPhotoForLocalNumber() {
-        return new FallbackPhoto80dp(R.drawable.ic_note_80, recipientColor);
+        return new FallbackPhoto80dp(R.drawable.ic_note_80, recipientColor.toAvatarColor(requireContext()));
       }
     });
     avatar.setAvatar(recipient);
@@ -317,9 +338,9 @@ public class ManageRecipientFragment extends LoggingFragment {
     colorChip.setImageDrawable(new ColorStateDrawable(colorDrawable, color));
     colorRow.setOnClickListener(v -> handleColorSelection(color));
 
-    secureCallButton.setVisibility(recipient.isRegistered() && !recipient.isLocalNumber() ? View.VISIBLE : View.GONE);
-    insecureCallButton.setVisibility(!recipient.isRegistered() && !recipient.isLocalNumber() ? View.VISIBLE : View.GONE);
-    secureVideoCallButton.setVisibility(recipient.isRegistered() && !recipient.isLocalNumber() ? View.VISIBLE : View.GONE);
+    secureCallButton.setVisibility(recipient.isRegistered() && !recipient.isSelf() ? View.VISIBLE : View.GONE);
+    insecureCallButton.setVisibility(!recipient.isRegistered() && !recipient.isSelf() ? View.VISIBLE : View.GONE);
+    secureVideoCallButton.setVisibility(recipient.isRegistered() && !recipient.isSelf() ? View.VISIBLE : View.GONE);
   }
 
   private void presentMediaCursor(ManageRecipientViewModel.MediaCursor mediaCursor) {
@@ -331,7 +352,7 @@ public class ManageRecipientFragment extends LoggingFragment {
     threadPhotoRailView.setListener(mediaRecord ->
         startActivityForResult(MediaPreviewActivity.intentFromMediaRecord(requireContext(),
                                                                           mediaRecord,
-                                                                          ViewCompat.getLayoutDirection(threadPhotoRailView) == ViewCompat.LAYOUT_DIRECTION_LTR),
+                                                                          ViewUtil.isLtr(threadPhotoRailView)),
                                REQUEST_CODE_RETURN_FROM_MEDIA));
   }
 

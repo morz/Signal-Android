@@ -1,16 +1,14 @@
 package org.thoughtcrime.securesms.conversation;
 
-import android.Manifest;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -19,12 +17,14 @@ import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.components.InputAwareLayout;
 import org.thoughtcrime.securesms.mediasend.Media;
 import org.thoughtcrime.securesms.mms.GlideApp;
+import org.thoughtcrime.securesms.util.StorageUtil;
 
 import java.util.Arrays;
 import java.util.List;
 
 public class AttachmentKeyboard extends FrameLayout implements InputAwareLayout.InputView {
 
+  private View                            container;
   private AttachmentKeyboardMediaAdapter  mediaAdapter;
   private AttachmentKeyboardButtonAdapter buttonAdapter;
   private Callback                        callback;
@@ -46,8 +46,9 @@ public class AttachmentKeyboard extends FrameLayout implements InputAwareLayout.
   private void init(@NonNull Context context) {
     inflate(context, R.layout.attachment_keyboard, this);
 
-    this.mediaList        = findViewById(R.id.attachment_keyboard_media_list       );
-    this.permissionText   = findViewById(R.id.attachment_keyboard_permission_text  );
+    this.container        = findViewById(R.id.attachment_keyboard_container);
+    this.mediaList        = findViewById(R.id.attachment_keyboard_media_list);
+    this.permissionText   = findViewById(R.id.attachment_keyboard_permission_text);
     this.permissionButton = findViewById(R.id.attachment_keyboard_permission_button);
 
     RecyclerView buttonList = findViewById(R.id.attachment_keyboard_button_list);
@@ -84,7 +85,7 @@ public class AttachmentKeyboard extends FrameLayout implements InputAwareLayout.
   }
 
   public void onMediaChanged(@NonNull List<Media> media) {
-    if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+    if (StorageUtil.canReadFromMediaStore()) {
       mediaAdapter.setMedia(media);
       permissionButton.setVisibility(GONE);
       permissionText.setVisibility(GONE);
@@ -99,6 +100,16 @@ public class AttachmentKeyboard extends FrameLayout implements InputAwareLayout.
       });
     }
   }
+
+  public void setWallpaperEnabled(boolean wallpaperEnabled) {
+    if (wallpaperEnabled) {
+      container.setBackgroundColor(getContext().getResources().getColor(R.color.wallpaper_compose_background));
+    } else {
+      container.setBackgroundColor(getContext().getResources().getColor(R.color.signal_background_primary));
+    }
+    buttonAdapter.setWallpaperEnabled(wallpaperEnabled);
+  }
+
 
   @Override
   public void show(int height, boolean immediate) {

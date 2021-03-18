@@ -1,6 +1,7 @@
 package org.thoughtcrime.securesms.crypto;
 
 import android.content.Context;
+
 import androidx.annotation.NonNull;
 
 import org.thoughtcrime.securesms.crypto.storage.TextSecureSessionStore;
@@ -28,4 +29,7 @@ public class SessionUtil {
     new TextSecureSessionStore(context).archiveAllSessions();
   }
 
+  public static void archiveSession(Context context, RecipientId recipientId, int deviceId) {
+    new TextSecureSessionStore(context).archiveSession(recipientId, deviceId);
+  }
 }

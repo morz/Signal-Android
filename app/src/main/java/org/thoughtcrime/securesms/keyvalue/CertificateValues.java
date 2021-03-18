@@ -4,7 +4,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
-import java.util.Map;
+import java.util.Collections;
+import java.util.List;
 
 public final class CertificateValues extends SignalStoreValues {
 
@@ -17,6 +18,11 @@ public final class CertificateValues extends SignalStoreValues {
 
   @Override
   void onFirstEverAppLaunch() {
+  }
+
+  @Override
+  @NonNull List<String> getKeysToIncludeInBackup() {
+    return Collections.emptyList();
   }
 
   @WorkerThread

@@ -27,6 +27,7 @@ import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.dd.CircularProgressButton;
 
+import org.signal.core.util.EditTextUtil;
 import org.thoughtcrime.securesms.LoggingFragment;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.groups.ui.GroupMemberListView;
@@ -40,6 +41,7 @@ import org.thoughtcrime.securesms.profiles.AvatarHelper;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientId;
 import org.thoughtcrime.securesms.util.BitmapUtil;
+import org.thoughtcrime.securesms.util.FeatureFlags;
 import org.thoughtcrime.securesms.util.ViewUtil;
 import org.thoughtcrime.securesms.util.text.AfterTextChanged;
 import org.thoughtcrime.securesms.util.views.LearnMoreTextView;
@@ -91,6 +93,7 @@ public class AddGroupDetailsFragment extends LoggingFragment {
     ImageView           avatar     = view.findViewById(R.id.group_avatar);
     View                mmsWarning = view.findViewById(R.id.mms_warning);
     LearnMoreTextView   gv2Warning = view.findViewById(R.id.gv2_warning);
+    View                addLater   = view.findViewById(R.id.add_later);
 
     avatarPlaceholder = VectorDrawableCompat.create(getResources(), R.drawable.ic_camera_outline_32_ultramarine, requireActivity().getTheme());
 
@@ -102,28 +105,30 @@ public class AddGroupDetailsFragment extends LoggingFragment {
 
     avatar.setOnClickListener(v -> showAvatarSelectionBottomSheet());
     members.setRecipientClickListener(this::handleRecipientClick);
+    EditTextUtil.addGraphemeClusterLimitFilter(name, FeatureFlags.getMaxGroupNameGraphemeLength());
     name.addTextChangedListener(new AfterTextChanged(editable -> viewModel.setName(editable.toString())));
     toolbar.setNavigationOnClickListener(unused -> callback.onNavigationButtonPressed());
     create.setOnClickListener(v -> handleCreateClicked());
-    viewModel.getMembers().observe(getViewLifecycleOwner(), recipients -> {
-      members.setMembers(recipients);
-      if (recipients.isEmpty()) {
-        toast(R.string.AddGroupDetailsFragment__groups_require_at_least_two_members);
-        callback.onNavigationButtonPressed();
-      }
+    viewModel.getMembers().observe(getViewLifecycleOwner(), list -> {
+      addLater.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
+      members.setMembers(list);
     });
     viewModel.getCanSubmitForm().observe(getViewLifecycleOwner(), isFormValid -> setCreateEnabled(isFormValid, true));
     viewModel.getIsMms().observe(getViewLifecycleOwner(), isMms -> {
       mmsWarning.setVisibility(isMms ? View.VISIBLE : View.GONE);
-      name.setVisibility(isMms ? View.GONE : View.VISIBLE);
-      avatar.setVisibility(isMms ? View.GONE : View.VISIBLE);
+      name.setHint(isMms ? R.string.AddGroupDetailsFragment__group_name_optional : R.string.AddGroupDetailsFragment__group_name_required);
       toolbar.setTitle(isMms ? R.string.AddGroupDetailsFragment__create_group : R.string.AddGroupDetailsFragment__name_this_group);
     });
     viewModel.getNonGv2CapableMembers().observe(getViewLifecycleOwner(), nonGv2CapableMembers -> {
+      boolean forcedMigration = FeatureFlags.groupsV1ForcedMigration();
+
+      int stringRes = forcedMigration ? R.plurals.AddGroupDetailsFragment__d_members_do_not_support_new_groups_so_this_group_cannot_be_created
+                                      : R.plurals.AddGroupDetailsFragment__d_members_do_not_support_new_groups;
+
       gv2Warning.setVisibility(nonGv2CapableMembers.isEmpty() ? View.GONE : View.VISIBLE);
-      gv2Warning.setText(requireContext().getResources().getQuantityString(R.plurals.AddGroupDetailsFragment__d_members_do_not_support_new_groups, nonGv2CapableMembers.size(), nonGv2CapableMembers.size()));
+      gv2Warning.setText(requireContext().getResources().getQuantityString(stringRes, nonGv2CapableMembers.size(), nonGv2CapableMembers.size()));
       gv2Warning.setLearnMoreVisible(true);
-      gv2Warning.setOnLinkClickListener(v -> NonGv2MemberDialog.showNonGv2Members(requireContext(), nonGv2CapableMembers));
+      gv2Warning.setOnLinkClickListener(v -> NonGv2MemberDialog.showNonGv2Members(requireContext(), nonGv2CapableMembers, forcedMigration));
     });
     viewModel.getAvatar().observe(getViewLifecycleOwner(), avatarBytes -> {
       if (avatarBytes == null) {
@@ -224,10 +229,6 @@ public class AddGroupDetailsFragment extends LoggingFragment {
         break;
       case ERROR_INVALID_NAME:
         name.setError(getString(R.string.AddGroupDetailsFragment__this_field_is_required));
-        break;
-      case ERROR_INVALID_MEMBER_COUNT:
-        toast(R.string.AddGroupDetailsFragment__groups_require_at_least_two_members);
-        callback.onNavigationButtonPressed();
         break;
       default:
         throw new IllegalStateException("Unexpected error: " + error.getErrorType().name());

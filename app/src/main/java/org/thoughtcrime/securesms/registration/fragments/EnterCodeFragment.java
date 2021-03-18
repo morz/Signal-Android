@@ -1,6 +1,8 @@
 package org.thoughtcrime.securesms.registration.fragments;
 
+import android.animation.Animator;
 import android.os.Bundle;
+import android.telephony.PhoneStateListener;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,11 +19,12 @@ import androidx.navigation.Navigation;
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.components.registration.CallMeCountDownView;
 import org.thoughtcrime.securesms.components.registration.VerificationCodeView;
 import org.thoughtcrime.securesms.components.registration.VerificationPinKeyboard;
-import org.thoughtcrime.securesms.logging.Log;
+import org.thoughtcrime.securesms.pin.PinRestoreRepository;
 import org.thoughtcrime.securesms.registration.ReceivedSmsEvent;
 import org.thoughtcrime.securesms.registration.service.CodeVerificationRequest;
 import org.thoughtcrime.securesms.registration.service.RegistrationCodeRequest;
@@ -30,13 +33,14 @@ import org.thoughtcrime.securesms.registration.viewmodel.RegistrationViewModel;
 import org.thoughtcrime.securesms.util.CommunicationActions;
 import org.thoughtcrime.securesms.util.SupportEmailUtil;
 import org.thoughtcrime.securesms.util.concurrent.AssertedSuccessListener;
-import org.whispersystems.signalservice.internal.contacts.entities.TokenResponse;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public final class EnterCodeFragment extends BaseRegistrationFragment {
+public final class EnterCodeFragment extends BaseRegistrationFragment
+                                     implements SignalStrengthPhoneStateListener.Callback
+{
 
   private static final String TAG = Log.tag(EnterCodeFragment.class);
 
@@ -47,7 +51,10 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
   private CallMeCountDownView     callMeCountDown;
   private View                    wrongNumber;
   private View                    noCodeReceivedHelp;
+  private View                    serviceWarning;
   private boolean                 autoCompleting;
+
+  private PhoneStateListener signalStrengthListener;
 
   @Override
   public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -67,12 +74,16 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
     callMeCountDown      = view.findViewById(R.id.call_me_count_down);
     wrongNumber          = view.findViewById(R.id.wrong_number);
     noCodeReceivedHelp   = view.findViewById(R.id.no_code);
+    serviceWarning       = view.findViewById(R.id.cell_service_warning);
+
+    signalStrengthListener = new SignalStrengthPhoneStateListener(this, this);
 
     connectKeyboard(verificationCodeView, keyboard);
+    hideKeyboard(requireContext(), view);
 
     setOnCodeFullyEnteredListener(verificationCodeView);
 
-    wrongNumber.setOnClickListener(v -> Navigation.findNavController(view).navigate(EnterCodeFragmentDirections.actionWrongNumber()));
+    wrongNumber.setOnClickListener(v -> onWrongNumber());
 
     callMeCountDown.setOnClickListener(v -> handlePhoneCallRequest());
 
@@ -86,7 +97,7 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
     noCodeReceivedHelp.setOnClickListener(v -> sendEmailToSupport());
 
     RegistrationViewModel model = getModel();
-    model.getSuccessfulCodeRequestAttempts().observe(this, (attempts) -> {
+    model.getSuccessfulCodeRequestAttempts().observe(getViewLifecycleOwner(), (attempts) -> {
       if (attempts >= 3) {
         noCodeReceivedHelp.setVisibility(View.VISIBLE);
         scrollView.postDelayed(() -> scrollView.smoothScrollTo(0, noCodeReceivedHelp.getBottom()), 15000);
@@ -94,6 +105,11 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
     });
 
     model.onStartEnterCode();
+  }
+
+  private void onWrongNumber() {
+    Navigation.findNavController(requireView())
+              .navigate(EnterCodeFragmentDirections.actionWrongNumber());
   }
 
   private void setOnCodeFullyEnteredListener(VerificationCodeView verificationCodeView) {
@@ -107,7 +123,7 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
 
       RegistrationService registrationService = RegistrationService.getInstance(model.getNumber().getE164Number(), model.getRegistrationSecret());
 
-      registrationService.verifyAccount(requireActivity(), model.getFcmToken(), code, null, null, null,
+      registrationService.verifyAccount(requireActivity(), model.getFcmToken(), code, null, null,
         new CodeVerificationRequest.VerifyCallback() {
 
           @Override
@@ -133,10 +149,9 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
           }
 
           @Override
-          public void onKbsRegistrationLockPinRequired(long timeRemaining, @NonNull TokenResponse tokenResponse, @NonNull String kbsStorageCredentials) {
+          public void onKbsRegistrationLockPinRequired(long timeRemaining, @NonNull PinRestoreRepository.TokenData tokenData, @NonNull String kbsStorageCredentials) {
             model.setLockedTimeRemaining(timeRemaining);
-            model.setStorageCredentials(kbsStorageCredentials);
-            model.setKeyBackupCurrentToken(tokenResponse);
+            model.setKeyBackupTokenData(tokenData);
             keyboard.displayLocked().addListener(new AssertedSuccessListener<Boolean>() {
               @Override
               public void onSuccess(Boolean r) {
@@ -147,7 +162,7 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
           }
 
           @Override
-          public void onIncorrectKbsRegistrationLockPin(@NonNull TokenResponse tokenResponse) {
+          public void onIncorrectKbsRegistrationLockPin(@NonNull PinRestoreRepository.TokenData tokenData) {
             throw new AssertionError("Unexpected, user has made no pin guesses");
           }
 
@@ -252,6 +267,14 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
   }
 
   private void handlePhoneCallRequest() {
+    showConfirmNumberDialogIfTranslated(requireContext(),
+                                        R.string.RegistrationActivity_you_will_receive_a_call_to_verify_this_number,
+                                        getModel().getNumber().getE164Number(),
+                                        this::handlePhoneCallRequestAfterConfirm,
+                                        this::onWrongNumber);
+  }
+
+  private void handlePhoneCallRequestAfterConfirm() {
     RegistrationViewModel model   = getModel();
     String                captcha = model.getCaptchaToken();
     model.clearCaptchaResponse();
@@ -305,19 +328,55 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
     super.onResume();
 
     RegistrationViewModel model = getModel();
-    model.getLiveNumber().observe(this, (s) -> header.setText(requireContext().getString(R.string.RegistrationActivity_enter_the_code_we_sent_to_s, s.getFullFormattedNumber())));
+    model.getLiveNumber().observe(getViewLifecycleOwner(), (s) -> header.setText(requireContext().getString(R.string.RegistrationActivity_enter_the_code_we_sent_to_s, s.getFullFormattedNumber())));
 
-    model.getCanCallAtTime().observe(this, callAtTime -> callMeCountDown.startCountDownTo(callAtTime));
+    model.getCanCallAtTime().observe(getViewLifecycleOwner(), callAtTime -> callMeCountDown.startCountDownTo(callAtTime));
   }
 
   private void sendEmailToSupport() {
     String body = SupportEmailUtil.generateSupportEmailBody(requireContext(),
-                                                            getString(R.string.RegistrationActivity_code_support_subject),
+                                                            R.string.RegistrationActivity_code_support_subject,
                                                             null,
                                                             null);
     CommunicationActions.openEmail(requireContext(),
                                    SupportEmailUtil.getSupportEmailAddress(requireContext()),
                                    getString(R.string.RegistrationActivity_code_support_subject),
                                    body);
+  }
+
+  @Override
+  public void onNoCellSignalPresent() {
+    if (serviceWarning.getVisibility() == View.VISIBLE) {
+      return;
+    }
+    serviceWarning.setVisibility(View.VISIBLE);
+    serviceWarning.animate()
+                  .alpha(1)
+                  .setListener(null)
+                  .start();
+
+    scrollView.postDelayed(() -> {
+      if (serviceWarning.getVisibility() == View.VISIBLE) {
+        scrollView.smoothScrollTo(0, serviceWarning.getBottom());
+      }
+    }, 1000);
+  }
+
+  @Override
+  public void onCellSignalPresent() {
+    if (serviceWarning.getVisibility() != View.VISIBLE) {
+      return;
+    }
+    serviceWarning.animate()
+                  .alpha(0)
+                  .setListener(new Animator.AnimatorListener() {
+                    @Override public void onAnimationEnd(Animator animation) {
+                      serviceWarning.setVisibility(View.GONE);
+                    }
+                    @Override public void onAnimationStart(Animator animation) {}
+                    @Override public void onAnimationCancel(Animator animation) {}
+                    @Override public void onAnimationRepeat(Animator animation) {}
+                  })
+                  .start();
   }
 }

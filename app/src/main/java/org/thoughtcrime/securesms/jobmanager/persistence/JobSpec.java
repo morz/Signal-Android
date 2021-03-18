@@ -1,6 +1,7 @@
 package org.thoughtcrime.securesms.jobmanager.persistence;
 
 import android.annotation.SuppressLint;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -15,9 +16,7 @@ public final class JobSpec {
   private final long    nextRunAttemptTime;
   private final int     runAttempt;
   private final int     maxAttempts;
-  private final long    maxBackoff;
   private final long    lifespan;
-  private final int     maxInstances;
   private final String  serializedData;
   private final String  serializedInputData;
   private final boolean isRunning;
@@ -30,9 +29,7 @@ public final class JobSpec {
                  long nextRunAttemptTime,
                  int runAttempt,
                  int maxAttempts,
-                 long maxBackoff,
                  long lifespan,
-                 int maxInstances,
                  @NonNull String serializedData,
                  @Nullable String serializedInputData,
                  boolean isRunning,
@@ -43,11 +40,9 @@ public final class JobSpec {
     this.queueKey            = queueKey;
     this.createTime          = createTime;
     this.nextRunAttemptTime  = nextRunAttemptTime;
-    this.maxBackoff          = maxBackoff;
     this.runAttempt          = runAttempt;
     this.maxAttempts         = maxAttempts;
     this.lifespan            = lifespan;
-    this.maxInstances        = maxInstances;
     this.serializedData      = serializedData;
     this.serializedInputData = serializedInputData;
     this.isRunning           = isRunning;
@@ -82,14 +77,6 @@ public final class JobSpec {
     return maxAttempts;
   }
 
-  public long getMaxBackoff() {
-    return maxBackoff;
-  }
-
-  public int getMaxInstances() {
-    return maxInstances;
-  }
-
   public long getLifespan() {
     return lifespan;
   }
@@ -119,9 +106,7 @@ public final class JobSpec {
            nextRunAttemptTime == jobSpec.nextRunAttemptTime &&
            runAttempt == jobSpec.runAttempt &&
            maxAttempts == jobSpec.maxAttempts &&
-           maxBackoff == jobSpec.maxBackoff &&
            lifespan == jobSpec.lifespan &&
-           maxInstances == jobSpec.maxInstances &&
            isRunning == jobSpec.isRunning &&
            memoryOnly == jobSpec.memoryOnly &&
            Objects.equals(id, jobSpec.id) &&
@@ -133,13 +118,13 @@ public final class JobSpec {
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, factoryKey, queueKey, createTime, nextRunAttemptTime, runAttempt, maxAttempts, maxBackoff, lifespan, maxInstances, serializedData, serializedInputData, isRunning, memoryOnly);
+    return Objects.hash(id, factoryKey, queueKey, createTime, nextRunAttemptTime, runAttempt, maxAttempts, lifespan, serializedData, serializedInputData, isRunning, memoryOnly);
   }
 
   @SuppressLint("DefaultLocale")
   @Override
   public @NonNull String toString() {
-    return String.format("id: JOB::%s | factoryKey: %s | queueKey: %s | createTime: %d | nextRunAttemptTime: %d | runAttempt: %d | maxAttempts: %d | maxBackoff: %d | maxInstances: %d | lifespan: %d | isRunning: %b | memoryOnly: %b",
-                         id, factoryKey, queueKey, createTime, nextRunAttemptTime, runAttempt, maxAttempts, maxBackoff, maxInstances, lifespan, isRunning, memoryOnly);
+    return String.format("id: JOB::%s | factoryKey: %s | queueKey: %s | createTime: %d | nextRunAttemptTime: %d | runAttempt: %d | maxAttempts: %d | lifespan: %d | isRunning: %b | memoryOnly: %b",
+                         id, factoryKey, queueKey, createTime, nextRunAttemptTime, runAttempt, maxAttempts, lifespan, isRunning, memoryOnly);
   }
 }

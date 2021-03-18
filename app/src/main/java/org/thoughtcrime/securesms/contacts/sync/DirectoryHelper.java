@@ -7,7 +7,6 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.OperationApplicationException;
 import android.database.Cursor;
-import android.net.Uri;
 import android.os.RemoteException;
 import android.provider.ContactsContract;
 import android.text.TextUtils;
@@ -19,41 +18,43 @@ import androidx.annotation.WorkerThread;
 import com.annimon.stream.Collectors;
 import com.annimon.stream.Stream;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.BuildConfig;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.contacts.ContactAccessor;
 import org.thoughtcrime.securesms.contacts.ContactsDatabase;
 import org.thoughtcrime.securesms.crypto.SessionUtil;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
-import org.thoughtcrime.securesms.database.MessageDatabase;
 import org.thoughtcrime.securesms.database.MessageDatabase.InsertResult;
 import org.thoughtcrime.securesms.database.RecipientDatabase;
 import org.thoughtcrime.securesms.database.RecipientDatabase.BulkOperationsHandle;
 import org.thoughtcrime.securesms.database.RecipientDatabase.RegisteredState;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobs.MultiDeviceContactUpdateJob;
+import org.thoughtcrime.securesms.jobs.RetrieveProfileJob;
 import org.thoughtcrime.securesms.jobs.StorageSyncJob;
 import org.thoughtcrime.securesms.keyvalue.SignalStore;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.notifications.NotificationChannels;
 import org.thoughtcrime.securesms.permissions.Permissions;
 import org.thoughtcrime.securesms.phonenumbers.PhoneNumberFormatter;
-import org.thoughtcrime.securesms.recipients.RecipientDetails;
-import org.thoughtcrime.securesms.registration.RegistrationUtil;
-import org.thoughtcrime.securesms.storage.StorageSyncHelper;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientId;
+import org.thoughtcrime.securesms.registration.RegistrationUtil;
 import org.thoughtcrime.securesms.sms.IncomingJoinedMessage;
-import org.thoughtcrime.securesms.util.FeatureFlags;
+import org.thoughtcrime.securesms.storage.StorageSyncHelper;
+import org.thoughtcrime.securesms.util.CursorUtil;
 import org.thoughtcrime.securesms.util.ProfileUtil;
 import org.thoughtcrime.securesms.util.SetUtil;
 import org.thoughtcrime.securesms.util.Stopwatch;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.Util;
+import org.whispersystems.libsignal.util.Pair;
 import org.whispersystems.libsignal.util.guava.Optional;
+import org.whispersystems.signalservice.api.profiles.ProfileAndCredential;
 import org.whispersystems.signalservice.api.profiles.SignalServiceProfile;
 import org.whispersystems.signalservice.api.push.exceptions.NotFoundException;
 import org.whispersystems.signalservice.api.util.UuidUtil;
+import org.whispersystems.signalservice.internal.util.concurrent.ListenableFuture;
 
 import java.io.IOException;
 import java.util.Calendar;
@@ -62,6 +63,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -82,7 +84,7 @@ public class DirectoryHelper {
       return;
     }
 
-    if (!Permissions.hasAll(context, Manifest.permission.WRITE_CONTACTS)) {
+    if (!Permissions.hasAll(context, Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)) {
       Log.w(TAG, "No contact permissions. Skipping.");
       return;
     }
@@ -154,13 +156,7 @@ public class DirectoryHelper {
       return RegisteredState.NOT_REGISTERED;
     }
 
-    DirectoryResult result;
-
-    if (FeatureFlags.cds()) {
-      result = ContactDiscoveryV2.getDirectoryResult(context, recipient.getE164().get());
-    } else {
-      result = ContactDiscoveryV1.getDirectoryResult(recipient.getE164().get());
-    }
+    DirectoryResult result = ContactDiscoveryV2.getDirectoryResult(context, recipient.getE164().get());
 
     stopwatch.split("e164-network");
 
@@ -179,6 +175,13 @@ public class DirectoryHelper {
       } else {
         recipientDatabase.markRegistered(recipient.getId());
       }
+    } else if (recipient.hasUuid() && recipient.isRegistered() && hasCommunicatedWith(context, recipient)) {
+      if (isUuidRegistered(context, recipient)) {
+        recipientDatabase.markRegistered(recipient.getId(), recipient.requireUuid());
+      } else {
+        recipientDatabase.markUnregistered(recipient.getId());
+      }
+      stopwatch.split("e164-unlisted-network");
     } else {
       recipientDatabase.markUnregistered(recipient.getId());
     }
@@ -216,13 +219,11 @@ public class DirectoryHelper {
       return;
     }
 
-    DirectoryResult result;
+    Stopwatch stopwatch = new Stopwatch("refresh");
 
-    if (FeatureFlags.cds()) {
-      result = ContactDiscoveryV2.getDirectoryResult(context, databaseNumbers, systemNumbers);
-    } else {
-      result = ContactDiscoveryV1.getDirectoryResult(databaseNumbers, systemNumbers);
-    }
+    DirectoryResult result = ContactDiscoveryV2.getDirectoryResult(context, databaseNumbers, systemNumbers);
+
+    stopwatch.split("network");
 
     if (result.getNumberRewrites().size() > 0) {
       Log.i(TAG, "[getDirectoryResult] Need to rewrite some numbers.");
@@ -235,44 +236,59 @@ public class DirectoryHelper {
     Set<RecipientId>         inactiveIds   = Stream.of(allNumbers)
                                                    .filterNot(activeNumbers::contains)
                                                    .filterNot(n -> result.getNumberRewrites().containsKey(n))
+                                                   .filterNot(n -> result.getIgnoredNumbers().contains(n))
                                                    .map(recipientDatabase::getOrInsertFromE164)
                                                    .collect(Collectors.toSet());
 
+    stopwatch.split("process-cds");
+
+    UnlistedResult unlistedResult = filterForUnlistedUsers(context, inactiveIds);
+
+    inactiveIds.removeAll(unlistedResult.getPossiblyActive());
+
+    if (unlistedResult.getRetries().size() > 0) {
+      Log.i(TAG, "Some profile fetches failed to resolve. Assuming not-inactive for now and scheduling a retry.");
+      RetrieveProfileJob.enqueue(unlistedResult.getRetries());
+    }
+
+    stopwatch.split("handle-unlisted");
+
+    Set<RecipientId> preExistingRegisteredUsers = new HashSet<>(recipientDatabase.getRegistered());
+
     recipientDatabase.bulkUpdatedRegisteredStatus(uuidMap, inactiveIds);
 
+    stopwatch.split("update-registered");
+
     updateContactsDatabase(context, activeIds, true, result.getNumberRewrites());
+
+    stopwatch.split("contacts-db");
 
     if (TextSecurePreferences.isMultiDevice(context)) {
       ApplicationDependencies.getJobManager().add(new MultiDeviceContactUpdateJob());
     }
 
     if (TextSecurePreferences.hasSuccessfullyRetrievedDirectory(context) && notifyOfNewUsers) {
-      Set<RecipientId>  existingSignalIds = new HashSet<>(recipientDatabase.getRegistered());
-      Set<RecipientId>  existingSystemIds = new HashSet<>(recipientDatabase.getSystemContacts());
-      Set<RecipientId>  newlyActiveIds    = new HashSet<>(activeIds);
+      Set<RecipientId>  systemContacts                = new HashSet<>(recipientDatabase.getSystemContacts());
+      Set<RecipientId>  newlyRegisteredSystemContacts = new HashSet<>(activeIds);
 
-      newlyActiveIds.removeAll(existingSignalIds);
-      newlyActiveIds.retainAll(existingSystemIds);
+      newlyRegisteredSystemContacts.removeAll(preExistingRegisteredUsers);
+      newlyRegisteredSystemContacts.retainAll(systemContacts);
 
-      notifyNewUsers(context, newlyActiveIds);
+      notifyNewUsers(context, newlyRegisteredSystemContacts);
     } else {
       TextSecurePreferences.setHasSuccessfullyRetrievedDirectory(context, true);
     }
+
+    stopwatch.stop(TAG);
   }
 
 
   private static boolean isUuidRegistered(@NonNull Context context, @NonNull Recipient recipient) throws IOException {
     try {
-      ProfileUtil.retrieveProfile(context, recipient, SignalServiceProfile.RequestType.PROFILE).get(10, TimeUnit.SECONDS);
+      ProfileUtil.retrieveProfileSync(context, recipient, SignalServiceProfile.RequestType.PROFILE);
       return true;
-    } catch (ExecutionException e) {
-      if (e.getCause() instanceof NotFoundException) {
-        return false;
-      } else {
-        throw new IOException(e);
-      }
-    } catch (InterruptedException | TimeoutException e) {
-      throw new IOException(e);
+    } catch (NotFoundException e) {
+      return false;
     }
   }
 
@@ -281,6 +297,11 @@ public class DirectoryHelper {
                                              boolean removeMissing,
                                              @NonNull Map<String, String> rewrites)
   {
+    if (!Permissions.hasAll(context, Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)) {
+      Log.w(TAG, "[updateContactsDatabase] No contact permissions. Skipping.");
+      return;
+    }
+
     AccountHolder account = getOrCreateSystemAccount(context);
 
     if (account == null) {
@@ -300,27 +321,64 @@ public class DirectoryHelper {
       contactsDatabase.removeDeletedRawContacts(account.getAccount());
       contactsDatabase.setRegisteredUsers(account.getAccount(), activeAddresses, removeMissing);
 
-      Cursor               cursor = ContactAccessor.getInstance().getAllSystemContacts(context);
-      BulkOperationsHandle handle = recipientDatabase.beginBulkSystemContactUpdate();
+      BulkOperationsHandle  handle = recipientDatabase.beginBulkSystemContactUpdate();
 
-      try {
+      try (Cursor cursor = ContactAccessor.getInstance().getAllSystemContacts(context)) {
         while (cursor != null && cursor.moveToNext()) {
-          String number = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER));
+          String mimeType = getMimeType(cursor);
 
-          if (isValidContactNumber(number)) {
-            String      formattedNumber = PhoneNumberFormatter.get(context).format(number);
-            String      realNumber      = Util.getFirstNonEmpty(rewrites.get(formattedNumber), formattedNumber);
-            RecipientId recipientId     = Recipient.externalContact(context, realNumber).getId();
-            String      displayName     = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME));
-            String      contactPhotoUri = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.PHOTO_URI));
-            String      contactLabel    = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.LABEL));
-            int         phoneType       = cursor.getInt(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.TYPE));
-            Uri         contactUri      = ContactsContract.Contacts.getLookupUri(cursor.getLong(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone._ID)),
-                                                                                 cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.LOOKUP_KEY)));
-
-            handle.setSystemContactInfo(recipientId, displayName, contactPhotoUri, contactLabel, phoneType, contactUri.toString());
+          if (!isPhoneMimeType(mimeType)) {
+            Log.w(TAG, "Ignoring unwanted mime type: " + mimeType);
+            continue;
           }
+
+          String        lookupKey     = getLookupKey(cursor);
+          ContactHolder contactHolder = new ContactHolder(lookupKey);
+
+          while (!cursor.isAfterLast() && getLookupKey(cursor).equals(lookupKey) && isPhoneMimeType(getMimeType(cursor))) {
+            String number = CursorUtil.requireString(cursor, ContactsContract.CommonDataKinds.Phone.NUMBER);
+
+            if (isValidContactNumber(number)) {
+              String formattedNumber = PhoneNumberFormatter.get(context).format(number);
+              String realNumber      = Util.getFirstNonEmpty(rewrites.get(formattedNumber), formattedNumber);
+
+              PhoneNumberRecord.Builder builder = new PhoneNumberRecord.Builder();
+
+              builder.withRecipientId(Recipient.externalContact(context, realNumber).getId());
+              builder.withDisplayName(CursorUtil.requireString(cursor, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME));
+              builder.withContactPhotoUri(CursorUtil.requireString(cursor, ContactsContract.CommonDataKinds.Phone.PHOTO_URI));
+              builder.withContactLabel(CursorUtil.requireString(cursor, ContactsContract.CommonDataKinds.Phone.LABEL));
+              builder.withPhoneType(CursorUtil.requireInt(cursor, ContactsContract.CommonDataKinds.Phone.TYPE));
+              builder.withContactUri(ContactsContract.Contacts.getLookupUri(CursorUtil.requireLong(cursor, ContactsContract.CommonDataKinds.Phone._ID),
+                                                                            CursorUtil.requireString(cursor, ContactsContract.CommonDataKinds.Phone.LOOKUP_KEY)));
+
+              contactHolder.addPhoneNumberRecord(builder.build());
+            } else {
+              Log.w(TAG, "Skipping phone entry with invalid number");
+            }
+
+            cursor.moveToNext();
+          }
+
+          if (!cursor.isAfterLast() && getLookupKey(cursor).equals(lookupKey)) {
+            if (isStructuredNameMimeType(getMimeType(cursor))) {
+              StructuredNameRecord.Builder builder = new StructuredNameRecord.Builder();
+
+              builder.withGivenName(CursorUtil.requireString(cursor, ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME));
+              builder.withFamilyName(CursorUtil.requireString(cursor, ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME));
+
+              contactHolder.setStructuredNameRecord(builder.build());
+            } else {
+              Log.i(TAG, "Skipping invalid mimeType " + mimeType);
+            }
+          } else {
+            Log.i(TAG, "No structured name for user, rolling back cursor.");
+            cursor.moveToPrevious();
+          }
+
+          contactHolder.commit(handle);
         }
+
       } finally {
         handle.finish();
       }
@@ -338,8 +396,24 @@ public class DirectoryHelper {
     }
   }
 
+  private static boolean isPhoneMimeType(@NonNull String mimeType) {
+    return ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE.equals(mimeType);
+  }
+
+  private static boolean isStructuredNameMimeType(@NonNull String mimeType) {
+    return ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE.equals(mimeType);
+  }
+
   private static boolean isValidContactNumber(@Nullable String number) {
     return !TextUtils.isEmpty(number) && !UuidUtil.isUuid(number);
+  }
+
+  private static @NonNull String getLookupKey(@NonNull Cursor cursor) {
+    return Objects.requireNonNull(CursorUtil.requireString(cursor, ContactsContract.CommonDataKinds.Phone.LOOKUP_KEY));
+  }
+
+  private static @NonNull String getMimeType(@NonNull Cursor cursor) {
+    return CursorUtil.requireString(cursor, ContactsContract.Data.MIMETYPE);
   }
 
   private static @Nullable AccountHolder getOrCreateSystemAccount(Context context) {
@@ -382,8 +456,11 @@ public class DirectoryHelper {
 
     for (RecipientId newUser: newUsers) {
       Recipient recipient = Recipient.resolved(newUser);
-      if (!SessionUtil.hasSession(context, recipient.getId()) && !recipient.isLocalNumber()) {
-        IncomingJoinedMessage  message      = new IncomingJoinedMessage(newUser);
+      if (!SessionUtil.hasSession(context, recipient.getId()) &&
+          !recipient.isSelf()                                 &&
+          recipient.hasAUserSetDisplayName(context))
+      {
+        IncomingJoinedMessage  message      = new IncomingJoinedMessage(recipient.getId());
         Optional<InsertResult> insertResult = DatabaseFactory.getSmsDatabase(context).insertMessageInbox(message);
 
         if (insertResult.isPresent()) {
@@ -408,15 +485,62 @@ public class DirectoryHelper {
     }).collect(Collectors.toSet());
   }
 
+  /**
+   * Users can mark themselves as 'unlisted' in CDS, meaning that even if CDS says they're
+   * unregistered, they might actually be registered. We need to double-check users who we already
+   * have UUIDs for. Also, we only want to bother doing this for users we have conversations for,
+   * so we will also only check for users that have a thread.
+   */
+  private static UnlistedResult filterForUnlistedUsers(@NonNull Context context, @NonNull Set<RecipientId> inactiveIds) {
+    List<Recipient> possiblyUnlisted = Stream.of(inactiveIds)
+                                             .map(Recipient::resolved)
+                                             .filter(Recipient::isRegistered)
+                                             .filter(Recipient::hasUuid)
+                                             .filter(r -> hasCommunicatedWith(context, r))
+                                             .toList();
+
+    List<Pair<Recipient, ListenableFuture<ProfileAndCredential>>> futures = Stream.of(possiblyUnlisted)
+                                                                                  .map(r -> new Pair<>(r, ProfileUtil.retrieveProfile(context, r, SignalServiceProfile.RequestType.PROFILE)))
+                                                                                  .toList();
+    Set<RecipientId> potentiallyActiveIds = new HashSet<>();
+    Set<RecipientId> retries              = new HashSet<>();
+
+    Stream.of(futures)
+          .forEach(pair -> {
+            try {
+              pair.second().get(5, TimeUnit.SECONDS);
+              potentiallyActiveIds.add(pair.first().getId());
+            } catch (InterruptedException | TimeoutException e) {
+              retries.add(pair.first().getId());
+              potentiallyActiveIds.add(pair.first().getId());
+            } catch (ExecutionException e) {
+              if (!(e.getCause() instanceof NotFoundException)) {
+                retries.add(pair.first().getId());
+                potentiallyActiveIds.add(pair.first().getId());
+              }
+            }
+          });
+
+    return new UnlistedResult(potentiallyActiveIds, retries);
+  }
+
+  private static boolean hasCommunicatedWith(@NonNull Context context, @NonNull Recipient recipient) {
+    return DatabaseFactory.getThreadDatabase(context).hasThread(recipient.getId()) ||
+           DatabaseFactory.getSessionDatabase(context).hasSessionFor(recipient.getId());
+  }
+
   static class DirectoryResult {
     private final Map<String, UUID>   registeredNumbers;
     private final Map<String, String> numberRewrites;
+    private final Set<String>         ignoredNumbers;
 
     DirectoryResult(@NonNull Map<String, UUID> registeredNumbers,
-                    @NonNull Map<String, String> numberRewrites)
+                    @NonNull Map<String, String> numberRewrites,
+                    @NonNull Set<String> ignoredNumbers)
     {
       this.registeredNumbers = registeredNumbers;
       this.numberRewrites    = numberRewrites;
+      this.ignoredNumbers    = ignoredNumbers;
     }
 
 
@@ -426,6 +550,28 @@ public class DirectoryHelper {
 
     @NonNull Map<String, String> getNumberRewrites() {
       return numberRewrites;
+    }
+
+    @NonNull Set<String> getIgnoredNumbers() {
+      return ignoredNumbers;
+    }
+  }
+
+  private static class UnlistedResult {
+    private final Set<RecipientId> possiblyActive;
+    private final Set<RecipientId> retries;
+
+    private UnlistedResult(@NonNull Set<RecipientId> possiblyActive, @NonNull Set<RecipientId> retries) {
+      this.possiblyActive = possiblyActive;
+      this.retries        = retries;
+    }
+
+    @NonNull Set<RecipientId> getPossiblyActive() {
+      return possiblyActive;
+    }
+
+    @NonNull Set<RecipientId> getRetries() {
+      return retries;
     }
   }
 

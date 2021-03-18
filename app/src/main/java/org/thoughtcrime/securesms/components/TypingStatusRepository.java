@@ -1,15 +1,17 @@
 package org.thoughtcrime.securesms.components;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
+
+import androidx.annotation.NonNull;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
-import android.content.Context;
-import androidx.annotation.NonNull;
 
 import com.annimon.stream.Collectors;
 import com.annimon.stream.Stream;
 
-import org.thoughtcrime.securesms.logging.Log;
+import org.signal.core.util.ThreadUtil;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.Util;
 
@@ -42,7 +44,7 @@ public class TypingStatusRepository {
   }
 
   public synchronized void onTypingStarted(@NonNull Context context, long threadId, @NonNull Recipient author, int device) {
-    if (author.isLocalNumber()) {
+    if (author.isSelf()) {
       return;
     }
 
@@ -57,16 +59,16 @@ public class TypingStatusRepository {
 
     Runnable timer = timers.get(typist);
     if (timer != null) {
-      Util.cancelRunnableOnMain(timer);
+      ThreadUtil.cancelRunnableOnMain(timer);
     }
 
     timer = () -> onTypingStopped(context, threadId, author, device, false);
-    Util.runOnMainDelayed(timer, RECIPIENT_TYPING_TIMEOUT);
+    ThreadUtil.runOnMainDelayed(timer, RECIPIENT_TYPING_TIMEOUT);
     timers.put(typist, timer);
   }
 
   public synchronized void onTypingStopped(@NonNull Context context, long threadId, @NonNull Recipient author, int device, boolean isReplacedByIncomingMessage) {
-    if (author.isLocalNumber()) {
+    if (author.isSelf()) {
       return;
     }
 
@@ -84,7 +86,7 @@ public class TypingStatusRepository {
 
     Runnable timer = timers.get(typist);
     if (timer != null) {
-      Util.cancelRunnableOnMain(timer);
+      ThreadUtil.cancelRunnableOnMain(timer);
       timers.remove(typist);
     }
   }

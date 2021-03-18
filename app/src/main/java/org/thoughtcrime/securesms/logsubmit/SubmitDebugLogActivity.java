@@ -58,6 +58,7 @@ public class SubmitDebugLogActivity extends BaseActivity implements SubmitDebugL
     dynamicTheme.onCreate(this);
     setContentView(R.layout.submit_debug_log_activity);
     getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+    getSupportActionBar().setTitle(R.string.AndroidManifest__log_submit);
 
     initView();
     initViewModel();
@@ -187,7 +188,7 @@ public class SubmitDebugLogActivity extends BaseActivity implements SubmitDebugL
   }
 
   private void presentLines(@NonNull List<LogLine> lines) {
-    if (loadingDialog != null) {
+    if (loadingDialog != null && lines.size() > 0) {
       loadingDialog.dismiss();
       loadingDialog = null;
 

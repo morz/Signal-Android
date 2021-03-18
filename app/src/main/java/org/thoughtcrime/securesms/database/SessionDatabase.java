@@ -4,14 +4,16 @@ package org.thoughtcrime.securesms.database;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import net.sqlcipher.database.SQLiteDatabase;
-
 import org.thoughtcrime.securesms.database.helpers.SQLCipherOpenHelper;
-import org.thoughtcrime.securesms.logging.Log;
+
+import org.signal.core.util.logging.Log;
+import org.thoughtcrime.securesms.database.helpers.SQLCipherOpenHelper;
 import org.thoughtcrime.securesms.recipients.RecipientId;
+import org.thoughtcrime.securesms.util.SqlUtil;
 import org.whispersystems.libsignal.state.SessionRecord;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 
@@ -143,6 +145,16 @@ public class SessionDatabase extends Database {
   public void deleteAllFor(@NonNull RecipientId recipientId) {
     SQLiteDatabase database = databaseHelper.getWritableDatabase();
     database.delete(TABLE_NAME, RECIPIENT_ID + " = ?", new String[] {recipientId.serialize()});
+  }
+
+  public boolean hasSessionFor(@NonNull RecipientId recipientId) {
+    SQLiteDatabase database = databaseHelper.getReadableDatabase();
+    String         query    = RECIPIENT_ID + " = ?";
+    String[]       args     = SqlUtil.buildArgs(recipientId);
+
+    try (Cursor cursor = database.query(TABLE_NAME, new String[] { ID }, query, args, null, null, null, "1")) {
+      return cursor != null && cursor.moveToFirst();
+    }
   }
 
   public static final class SessionRow {

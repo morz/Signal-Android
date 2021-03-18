@@ -5,15 +5,16 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
-import androidx.annotation.NonNull;
-import org.thoughtcrime.securesms.logging.Log;
 
+import androidx.annotation.NonNull;
+
+import org.signal.core.util.ThreadUtil;
+import org.signal.core.util.concurrent.SignalExecutors;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.providers.BlobProvider;
 import org.thoughtcrime.securesms.util.MediaUtil;
-import org.thoughtcrime.securesms.util.Util;
 import org.thoughtcrime.securesms.util.concurrent.ListenableFuture;
 import org.thoughtcrime.securesms.util.concurrent.SettableFuture;
-import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
 import org.whispersystems.libsignal.util.Pair;
 
 import java.io.IOException;
@@ -89,10 +90,10 @@ public class AudioRecorder {
   }
 
   private <T> void sendToFuture(final SettableFuture<T> future, final Exception exception) {
-    Util.runOnMain(() -> future.setException(exception));
+    ThreadUtil.runOnMain(() -> future.setException(exception));
   }
 
   private <T> void sendToFuture(final SettableFuture<T> future, final T result) {
-    Util.runOnMain(() -> future.set(result));
+    ThreadUtil.runOnMain(() -> future.set(result));
   }
 }

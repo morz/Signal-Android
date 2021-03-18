@@ -7,6 +7,7 @@ import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
@@ -18,12 +19,12 @@ import org.thoughtcrime.securesms.components.emoji.MediaKeyboardProvider;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.model.StickerPackRecord;
 import org.thoughtcrime.securesms.database.model.StickerRecord;
+import org.thoughtcrime.securesms.glide.cache.ApngOptions;
 import org.thoughtcrime.securesms.mms.DecryptableStreamUriLoader;
 import org.thoughtcrime.securesms.mms.GlideRequests;
 import org.thoughtcrime.securesms.stickers.StickerKeyboardPageFragment.EventListener;
 import org.thoughtcrime.securesms.stickers.StickerKeyboardRepository.PackListResult;
-import org.thoughtcrime.securesms.util.ResUtil;
-import org.thoughtcrime.securesms.util.ThemeUtil;
+import org.thoughtcrime.securesms.util.DeviceProperties;
 import org.thoughtcrime.securesms.util.Throttler;
 
 import java.util.ArrayList;
@@ -38,6 +39,7 @@ public final class StickerKeyboardProvider implements MediaKeyboardProvider,
                                                 MediaKeyboardProvider.AddObserver,
                                                 StickerKeyboardPageFragment.EventListener
 {
+  private static final int UNSET = -1;
 
   private final Context              context;
   private final StickerEventListener eventListener;
@@ -48,6 +50,7 @@ public final class StickerKeyboardProvider implements MediaKeyboardProvider,
   private Presenter                presenter;
   private boolean                  isSoloProvider;
   private StickerKeyboardViewModel viewModel;
+  private int                      currentPosition;
 
   public StickerKeyboardProvider(@NonNull FragmentActivity activity,
                                  @NonNull StickerEventListener eventListener)
@@ -56,6 +59,7 @@ public final class StickerKeyboardProvider implements MediaKeyboardProvider,
     this.eventListener    = eventListener;
     this.pagerAdapter     = new StickerPagerAdapter(activity.getSupportFragmentManager(), this);
     this.stickerThrottler = new Throttler(100);
+    this.currentPosition  = UNSET;
 
     initViewModel(activity);
   }
@@ -63,9 +67,9 @@ public final class StickerKeyboardProvider implements MediaKeyboardProvider,
   @Override
   public int getProviderIconView(boolean selected) {
     if (selected) {
-      return ThemeUtil.isDarkTheme(context) ? R.layout.sticker_keyboard_icon_dark_selected : R.layout.sticker_keyboard_icon_light_selected;
+      return R.layout.sticker_keyboard_icon_selected;
     } else {
-      return ThemeUtil.isDarkTheme(context) ? R.layout.sticker_keyboard_icon_dark : R.layout.sticker_keyboard_icon_light;
+      return R.layout.sticker_keyboard_icon;
     }
   }
 
@@ -77,7 +81,7 @@ public final class StickerKeyboardProvider implements MediaKeyboardProvider,
     PackListResult result = viewModel.getPacks().getValue();
 
     if (result != null) {
-      present(presenter, result, true);
+      present(presenter, result, false);
     }
   }
 
@@ -110,6 +114,11 @@ public final class StickerKeyboardProvider implements MediaKeyboardProvider,
     }
   }
 
+  @Override
+  public void setCurrentPosition(int currentPosition) {
+    this.currentPosition = currentPosition;
+  }
+
   private void initViewModel(@NonNull FragmentActivity activity) {
     StickerKeyboardRepository repository = new StickerKeyboardRepository(DatabaseFactory.getStickerDatabase(activity));
     viewModel = ViewModelProviders.of(activity, new StickerKeyboardViewModel.Factory(activity.getApplication(), repository)).get(StickerKeyboardViewModel.class);
@@ -134,13 +143,13 @@ public final class StickerKeyboardProvider implements MediaKeyboardProvider,
       return;
     }
 
-    int startingIndex = presenter.getCurrentPosition();
+    int startingIndex = currentPosition;
 
-    if (calculateStartingIndex) {
+    if (calculateStartingIndex || startingIndex == UNSET) {
       startingIndex = !result.hasRecents() && result.getPacks().size() > 0 ? 1 : 0;
     }
 
-    presenter.present(this, pagerAdapter, new IconProvider(context, result.getPacks()), null, this, null, startingIndex);
+    presenter.present(this, pagerAdapter, new IconProvider(context, result.getPacks(), DeviceProperties.shouldAllowApngStickerAnimation(context)), null, this, null, startingIndex);
 
     if (isSoloProvider && result.getPacks().isEmpty()) {
       context.startActivity(StickerManagementActivity.getIntent(context));
@@ -231,21 +240,24 @@ public final class StickerKeyboardProvider implements MediaKeyboardProvider,
 
     private final Context                 context;
     private final List<StickerPackRecord> packs;
+    private final boolean                 allowApngAnimation;
 
-    private IconProvider(@NonNull Context context, List<StickerPackRecord> packs) {
-      this.context    = context;
-      this.packs      = packs;
+    private IconProvider(@NonNull Context context, List<StickerPackRecord> packs, boolean allowApngAnimation) {
+      this.context            = context;
+      this.packs              = packs;
+      this.allowApngAnimation = allowApngAnimation;
     }
 
     @Override
     public void loadCategoryTabIcon(@NonNull GlideRequests glideRequests, @NonNull ImageView imageView, int index) {
       if (index == 0) {
-        Drawable icon = ResUtil.getDrawable(context, R.attr.emoji_category_recent);
+        Drawable icon = ContextCompat.getDrawable(context, R.drawable.ic_recent_20);
         imageView.setImageDrawable(icon);
       } else {
         Uri uri = packs.get(index - 1).getCover().getUri();
 
         glideRequests.load(new DecryptableStreamUriLoader.DecryptableUri(uri))
+                     .set(ApngOptions.ANIMATE, allowApngAnimation)
                      .into(imageView);
       }
     }

@@ -6,6 +6,7 @@ import android.database.Cursor;
 import androidx.annotation.NonNull;
 import androidx.preference.PreferenceManager;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.attachments.DatabaseAttachment;
 import org.thoughtcrime.securesms.color.MaterialColor;
 import org.thoughtcrime.securesms.contacts.avatars.ContactColorsLegacy;
@@ -27,16 +28,15 @@ import org.thoughtcrime.securesms.jobs.CreateSignedPreKeyJob;
 import org.thoughtcrime.securesms.jobs.DirectoryRefreshJob;
 import org.thoughtcrime.securesms.jobs.PushDecryptMessageJob;
 import org.thoughtcrime.securesms.jobs.RefreshAttributesJob;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.GlideApp;
 import org.thoughtcrime.securesms.service.KeyCachingService;
 import org.thoughtcrime.securesms.transport.RetryLaterException;
 import org.thoughtcrime.securesms.util.FileUtils;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.VersionTracker;
+import org.whispersystems.signalservice.api.messages.SignalServiceEnvelope;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.List;
 
 /**
@@ -291,10 +291,10 @@ public class LegacyMigrationJob extends MigrationJob {
     PushDatabase pushDatabase = DatabaseFactory.getPushDatabase(context);
     JobManager   jobManager   = ApplicationDependencies.getJobManager();
 
-    try (Cursor pushReader = pushDatabase.getPending()) {
-      while (pushReader != null && pushReader.moveToNext()) {
-        jobManager.add(new PushDecryptMessageJob(context,
-                                                 pushReader.getLong(pushReader.getColumnIndexOrThrow(PushDatabase.ID))));
+    try (PushDatabase.Reader pushReader = pushDatabase.readerFor(pushDatabase.getPending())) {
+      SignalServiceEnvelope envelope;
+      while ((envelope = pushReader.getNext()) != null) {
+        jobManager.add(new PushDecryptMessageJob(context, envelope));
       }
     }
   }

@@ -2,12 +2,18 @@ package org.thoughtcrime.securesms.keyvalue;
 
 import androidx.annotation.NonNull;
 
+import java.util.Collections;
+import java.util.List;
+
 public final class MiscellaneousValues extends SignalStoreValues {
 
-  private static final String LAST_PREKEY_REFRESH_TIME    = "last_prekey_refresh_time";
-  private static final String MESSAGE_REQUEST_ENABLE_TIME = "message_request_enable_time";
-  private static final String LAST_PROFILE_REFRESH_TIME   = "misc.last_profile_refresh_time";
-  private static final String USERNAME_SHOW_REMINDER      = "username.show.reminder";
+  private static final String LAST_PREKEY_REFRESH_TIME        = "last_prekey_refresh_time";
+  private static final String MESSAGE_REQUEST_ENABLE_TIME     = "message_request_enable_time";
+  private static final String LAST_PROFILE_REFRESH_TIME       = "misc.last_profile_refresh_time";
+  private static final String LAST_GV1_ROUTINE_MIGRATION_TIME = "misc.last_gv1_routine_migration_time";
+  private static final String USERNAME_SHOW_REMINDER          = "username.show.reminder";
+  private static final String CLIENT_DEPRECATED               = "misc.client_deprecated";
+  private static final String OLD_DEVICE_TRANSFER_LOCKED      = "misc.old_device.transfer.locked";
 
   MiscellaneousValues(@NonNull KeyValueStore store) {
     super(store);
@@ -15,7 +21,12 @@ public final class MiscellaneousValues extends SignalStoreValues {
 
   @Override
   void onFirstEverAppLaunch() {
-    putLong(MESSAGE_REQUEST_ENABLE_TIME, System.currentTimeMillis());
+    putLong(MESSAGE_REQUEST_ENABLE_TIME, 0);
+  }
+
+  @Override
+  @NonNull List<String> getKeysToIncludeInBackup() {
+    return Collections.emptyList();
   }
 
   public long getLastPrekeyRefreshTime() {
@@ -27,7 +38,7 @@ public final class MiscellaneousValues extends SignalStoreValues {
   }
 
   public long getMessageRequestEnableTime() {
-    return getLong(MESSAGE_REQUEST_ENABLE_TIME, System.currentTimeMillis());
+    return getLong(MESSAGE_REQUEST_ENABLE_TIME, 0);
   }
 
   public long getLastProfileRefreshTime() {
@@ -38,11 +49,43 @@ public final class MiscellaneousValues extends SignalStoreValues {
     putLong(LAST_PROFILE_REFRESH_TIME, time);
   }
 
+  public long getLastGv1RoutineMigrationTime() {
+    return getLong(LAST_GV1_ROUTINE_MIGRATION_TIME, 0);
+  }
+
+  public void setLastGv1RoutineMigrationTime(long time) {
+    putLong(LAST_GV1_ROUTINE_MIGRATION_TIME, time);
+  }
+
   public void hideUsernameReminder() {
     putBoolean(USERNAME_SHOW_REMINDER, false);
   }
 
   public boolean shouldShowUsernameReminder() {
     return getBoolean(USERNAME_SHOW_REMINDER, true);
+  }
+
+  public boolean isClientDeprecated() {
+    return getBoolean(CLIENT_DEPRECATED, false);
+  }
+
+  public void markClientDeprecated() {
+    putBoolean(CLIENT_DEPRECATED, true);
+  }
+
+  public void clearClientDeprecated() {
+    putBoolean(CLIENT_DEPRECATED, false);
+  }
+
+  public boolean isOldDeviceTransferLocked() {
+    return getBoolean(OLD_DEVICE_TRANSFER_LOCKED, false);
+  }
+
+  public void markOldDeviceTransferLocked() {
+    putBoolean(OLD_DEVICE_TRANSFER_LOCKED, true);
+  }
+
+  public void clearOldDeviceTransferLocked() {
+    putBoolean(OLD_DEVICE_TRANSFER_LOCKED, false);
   }
 }

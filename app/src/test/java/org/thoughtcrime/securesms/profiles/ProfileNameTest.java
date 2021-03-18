@@ -20,12 +20,22 @@ public final class ProfileNameTest {
     assertFalse("ProfileName should not be CJKV", profileName.isProfileNameCJKV());
     assertEquals("ProfileName should have empty given name", "", profileName.getGivenName());
     assertEquals("ProfileName should have empty family name", "", profileName.getFamilyName());
+    assertTrue(profileName.isEmpty());
   }
 
   @Test
   public void givenNullProfileName_whenIFromSerialized_thenIExpectExactlyEmpty() {
     // GIVEN
     ProfileName profileName = ProfileName.fromSerialized(null);
+
+    // THEN
+    assertSame(ProfileName.EMPTY, profileName);
+  }
+
+  @Test
+  public void givenProfileNameWithNulls_thenIExpectExactlyEmpty() {
+    // GIVEN
+    ProfileName profileName = ProfileName.fromParts(null, null);
 
     // THEN
     assertSame(ProfileName.EMPTY, profileName);
@@ -157,10 +167,10 @@ public final class ProfileNameTest {
 
   @Test
   public void fromParts_with_long_name_parts() {
-    ProfileName name = ProfileName.fromParts("GivenSomeVeryLongNameSomeVeryLongName", "FamilySomeVeryLongNameSomeVeryLongName");
+    ProfileName name = ProfileName.fromParts("GivenSomeVeryLongNameSomeVeryLongNameGivenSomeVeryLongNameSomeVeryLongNameGivenSomeVeryLongNameSomeVeryLongNameGivenSomeVeryLongNameSomeVeryLongName", "FamilySomeVeryLongNameSomeVeryLongName");
 
-    assertEquals("GivenSomeVeryLongNameSomeV", name.getGivenName());
-    assertEquals("FamilySomeVeryLongNameSome", name.getFamilyName());
+    assertEquals("GivenSomeVeryLongNameSomeVeryLongNameGivenSomeVeryLongNameSomeVeryLongNameGivenSomeVeryLongNameSomeVeryLongNameGivenSomeVeryLong", name.getGivenName());
+    assertEquals("FamilySomeVeryLongNameSomeVeryLongName", name.getFamilyName());
   }
 
   @Test

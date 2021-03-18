@@ -1,34 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
-                  xmlns:tools="http://schemas.android.com/tools">
-    <PreferenceCategory android:key="media_download" android:title="@string/preferences_chats__media_auto_download">
-        <MultiSelectListPreference
-                android:title="@string/preferences_chats__when_using_mobile_data"
-                android:key="pref_media_download_mobile"
-                android:defaultValue="@array/pref_media_download_mobile_data_default"
-                android:persistent="true"
-                android:entries="@array/pref_media_download_values"
-                android:entryValues="@array/pref_media_download_entries" />
-
-        <MultiSelectListPreference
-                android:title="@string/preferences_chats__when_using_wifi"
-                android:key="pref_media_download_wifi"
-                android:defaultValue="@array/pref_media_download_wifi_default"
-                android:persistent="true"
-                android:entries="@array/pref_media_download_values"
-                android:entryValues="@array/pref_media_download_entries" />
-
-        <MultiSelectListPreference
-                android:title="@string/preferences_chats__when_roaming"
-                android:key="pref_media_download_roaming"
-                android:defaultValue="@array/pref_media_download_roaming_default"
-                android:persistent="true"
-                android:entries="@array/pref_media_download_values"
-                android:entryValues="@array/pref_media_download_entries" />
-    </PreferenceCategory>
-
-    <PreferenceCategory android:layout="@layout/preference_divider"/>
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory android:title="@string/preferences_chats__chats">
         <org.thoughtcrime.securesms.preferences.widgets.SignalListPreference
@@ -57,31 +30,28 @@
                 android:summary="@string/preferences__pressing_the_enter_key_will_send_text_messages"
                 android:title="@string/preferences__pref_enter_sends_title"/>
 
+        <org.thoughtcrime.securesms.components.SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="pref_system_contact_photos"
+            android:summary="@string/preferences__display_contact_photos_from_your_address_book_if_available"
+            android:title="@string/preferences__pref_use_address_book_photos"/>
+
     </PreferenceCategory>
 
     <PreferenceCategory android:layout="@layout/preference_divider"/>
 
     <PreferenceCategory android:key="backup_category" android:title="@string/preferences_chats__backups">
-        <org.thoughtcrime.securesms.components.SwitchPreferenceCompat
-                android:defaultValue="false"
-                android:key="pref_backup_enabled"
-                android:title="@string/preferences_chats__chat_backups"
-                android:summary="@string/preferences_chats__backup_chats_to_external_storage" />
-
-        <org.thoughtcrime.securesms.preferences.widgets.ProgressPreference
-                android:key="pref_backup_create"
-                android:title="@string/preferences_chats__create_backup"
+        <androidx.preference.Preference
+                android:key="pref_backup"
+                android:summary="@string/preferences_chats__backup_chats_to_external_storage"
                 android:persistent="false"
-                android:dependency="pref_backup_enabled"
-                tools:summary="Last backup: 3 days ago"/>
+                android:title="@string/preferences_chats__chat_backups" />
 
         <androidx.preference.Preference
-                android:key="pref_backup_passphrase_verify"
-                android:title="@string/preferences_chats__verify_backup_passphrase"
-                android:persistent="false"
-                android:dependency="pref_backup_enabled"
-                android:summary="@string/preferences_chats__test_your_backup_passphrase_and_verify_that_it_matches"/>
-
+            android:key="pref_transfer"
+            android:summary="@string/preferences_chats__transfer_account_to_a_new_android_device"
+            android:persistent="false"
+            android:title="@string/preferences_chats__transfer_account" />
     </PreferenceCategory>
 
 </PreferenceScreen>
