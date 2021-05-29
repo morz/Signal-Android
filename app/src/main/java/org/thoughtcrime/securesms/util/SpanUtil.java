@@ -1,11 +1,13 @@
 package org.thoughtcrime.securesms.util;
 
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.text.Spannable;
 import android.text.SpannableString;
+import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.TextUtils;
@@ -19,12 +21,18 @@ import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 import android.view.View;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
 import androidx.core.content.ContextCompat;
 
 import org.thoughtcrime.securesms.R;
 
-public class SpanUtil {
+public final class SpanUtil {
+
+  private SpanUtil() {}
+
+  public static final String SPAN_PLACE_HOLDER = "<<<SPAN>>>";
 
   public static CharSequence italic(CharSequence sequence) {
     return italic(sequence, sequence.length());
@@ -91,13 +99,35 @@ public class SpanUtil {
     return imageSpan;
   }
 
-  public static CharSequence clickSubstring(@NonNull Context context, @NonNull CharSequence fullString, @NonNull CharSequence substring, @NonNull View.OnClickListener clickListener) {
+  public static CharSequence learnMore(@NonNull Context context,
+                                       @ColorInt int color,
+                                       @NonNull View.OnClickListener onLearnMoreClicked)
+  {
+    String learnMore = context.getString(R.string.LearnMoreTextView_learn_more);
+    return clickSubstring(learnMore, learnMore, onLearnMoreClicked, color);
+  }
+
+  public static CharSequence clickSubstring(@NonNull Context context,
+                                            @NonNull CharSequence fullString,
+                                            @NonNull CharSequence substring,
+                                            @NonNull View.OnClickListener clickListener) {
+    return clickSubstring(fullString,
+                          substring,
+                          clickListener,
+                          ContextCompat.getColor(context, R.color.signal_accent_primary));
+  }
+
+  public static CharSequence clickSubstring(@NonNull CharSequence fullString,
+                                            @NonNull CharSequence substring,
+                                            @NonNull View.OnClickListener clickListener,
+                                            @ColorInt int linkColor)
+  {
     ClickableSpan clickable = new ClickableSpan() {
       @Override
       public void updateDrawState(@NonNull TextPaint ds) {
         super.updateDrawState(ds);
         ds.setUnderlineText(false);
-        ds.setColor(ContextCompat.getColor(context, R.color.signal_accent_primary));
+        ds.setColor(linkColor);
       }
 
       @Override
@@ -115,5 +145,19 @@ public class SpanUtil {
     }
 
     return spannable;
+  }
+
+  public static @NonNull CharSequence insertSingleSpan(@NonNull Resources resources, @StringRes int res, @NonNull CharSequence span) {
+    return replacePlaceHolder(resources.getString(res, SPAN_PLACE_HOLDER), span);
+  }
+
+  public static CharSequence replacePlaceHolder(@NonNull String string, @NonNull CharSequence span) {
+    int index = string.indexOf(SpanUtil.SPAN_PLACE_HOLDER);
+    if (index == -1) {
+      return string;
+    }
+    SpannableStringBuilder builder = new SpannableStringBuilder(string);
+    builder.replace(index, index + SpanUtil.SPAN_PLACE_HOLDER.length(), span);
+    return builder;
   }
 }

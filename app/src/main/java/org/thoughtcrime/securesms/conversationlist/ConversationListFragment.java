@@ -53,15 +53,15 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.view.ActionMode;
 import androidx.appcompat.widget.Toolbar;
 import androidx.appcompat.widget.TooltipCompat;
+import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.constraintlayout.widget.ConstraintSet;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.DialogFragment;
-import androidx.lifecycle.DefaultLifecycleObserver;
-import androidx.lifecycle.LifecycleOwner;
-import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.lifecycle.ViewModelProviders;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.transition.TransitionManager;
 
 import com.annimon.stream.Stream;
 import com.google.android.material.snackbar.Snackbar;
@@ -71,13 +71,13 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 import org.signal.core.util.concurrent.SignalExecutors;
 import org.signal.core.util.logging.Log;
-import org.thoughtcrime.securesms.ApplicationPreferencesActivity;
 import org.thoughtcrime.securesms.MainFragment;
 import org.thoughtcrime.securesms.MainNavigator;
 import org.thoughtcrime.securesms.NewConversationActivity;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.components.RatingManager;
 import org.thoughtcrime.securesms.components.SearchToolbar;
+import org.thoughtcrime.securesms.components.UnreadPaymentsView;
 import org.thoughtcrime.securesms.components.recyclerview.DeleteItemAnimator;
 import org.thoughtcrime.securesms.components.registration.PulsingFloatingActionButton;
 import org.thoughtcrime.securesms.components.reminder.DozeReminder;
@@ -88,10 +88,12 @@ import org.thoughtcrime.securesms.components.reminder.Reminder;
 import org.thoughtcrime.securesms.components.reminder.ReminderView;
 import org.thoughtcrime.securesms.components.reminder.ServiceOutageReminder;
 import org.thoughtcrime.securesms.components.reminder.UnauthorizedReminder;
+import org.thoughtcrime.securesms.components.settings.app.AppSettingsActivity;
 import org.thoughtcrime.securesms.conversation.ConversationFragment;
 import org.thoughtcrime.securesms.conversationlist.model.Conversation;
 import org.thoughtcrime.securesms.conversationlist.model.MessageResult;
 import org.thoughtcrime.securesms.conversationlist.model.SearchResult;
+import org.thoughtcrime.securesms.conversationlist.model.UnreadPayments;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.MessageDatabase.MarkedMessageInfo;
 import org.thoughtcrime.securesms.database.ThreadDatabase;
@@ -110,7 +112,11 @@ import org.thoughtcrime.securesms.megaphone.Megaphones;
 import org.thoughtcrime.securesms.mms.GlideApp;
 import org.thoughtcrime.securesms.net.PipeConnectivityListener;
 import org.thoughtcrime.securesms.notifications.MarkReadReceiver;
+import org.thoughtcrime.securesms.payments.preferences.PaymentsActivity;
+import org.thoughtcrime.securesms.payments.preferences.details.PaymentDetailsFragmentArgs;
+import org.thoughtcrime.securesms.payments.preferences.details.PaymentDetailsParcelable;
 import org.thoughtcrime.securesms.permissions.Permissions;
+import org.thoughtcrime.securesms.ratelimit.RecaptchaProofBottomSheetFragment;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.service.KeyCachingService;
 import org.thoughtcrime.securesms.sms.MessageSender;
@@ -125,6 +131,7 @@ import org.thoughtcrime.securesms.util.SnapToTopDataObserver;
 import org.thoughtcrime.securesms.util.StickyHeaderDecoration;
 import org.thoughtcrime.securesms.util.Stopwatch;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
+import org.thoughtcrime.securesms.util.Util;
 import org.thoughtcrime.securesms.util.ViewUtil;
 import org.thoughtcrime.securesms.util.WindowUtil;
 import org.thoughtcrime.securesms.util.concurrent.SimpleTask;
@@ -139,6 +146,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 import static android.app.Activity.RESULT_OK;
 
@@ -157,8 +165,10 @@ public class ConversationListFragment extends MainFragment implements ActionMode
   private static final int MAXIMUM_PINNED_CONVERSATIONS = 4;
 
   private ActionMode                        actionMode;
+  private ConstraintLayout                  constraintLayout;
   private RecyclerView                      list;
   private Stub<ReminderView>                reminderView;
+  private Stub<UnreadPaymentsView>          paymentNotificationView;
   private Stub<ViewGroup>                   emptyState;
   private TextView                          searchEmptyState;
   private PulsingFloatingActionButton       fab;
@@ -167,6 +177,7 @@ public class ConversationListFragment extends MainFragment implements ActionMode
   private ImageView                         proxyStatus;
   private ImageView                         searchAction;
   private View                              toolbarShadow;
+  private View                              unreadPaymentsDot;
   private ConversationListViewModel         viewModel;
   private RecyclerView.Adapter              activeAdapter;
   private ConversationListAdapter           defaultAdapter;
@@ -197,17 +208,20 @@ public class ConversationListFragment extends MainFragment implements ActionMode
 
   @Override
   public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-    list               = view.findViewById(R.id.list);
-    fab                = view.findViewById(R.id.fab);
-    cameraFab          = view.findViewById(R.id.camera_fab);
-    searchEmptyState   = view.findViewById(R.id.search_no_results);
-    searchAction       = view.findViewById(R.id.search_action);
-    toolbarShadow      = view.findViewById(R.id.conversation_list_toolbar_shadow);
-    proxyStatus        = view.findViewById(R.id.conversation_list_proxy_status);
-    reminderView       = new Stub<>(view.findViewById(R.id.reminder));
-    emptyState         = new Stub<>(view.findViewById(R.id.empty_state));
-    searchToolbar      = new Stub<>(view.findViewById(R.id.search_toolbar));
-    megaphoneContainer = new Stub<>(view.findViewById(R.id.megaphone_container));
+    constraintLayout        = view.findViewById(R.id.constraint_layout);
+    list                    = view.findViewById(R.id.list);
+    fab                     = view.findViewById(R.id.fab);
+    cameraFab               = view.findViewById(R.id.camera_fab);
+    searchEmptyState        = view.findViewById(R.id.search_no_results);
+    searchAction            = view.findViewById(R.id.search_action);
+    toolbarShadow           = view.findViewById(R.id.conversation_list_toolbar_shadow);
+    proxyStatus             = view.findViewById(R.id.conversation_list_proxy_status);
+    unreadPaymentsDot       = view.findViewById(R.id.unread_payments_indicator);
+    reminderView            = new Stub<>(view.findViewById(R.id.reminder));
+    emptyState              = new Stub<>(view.findViewById(R.id.empty_state));
+    searchToolbar           = new Stub<>(view.findViewById(R.id.search_toolbar));
+    megaphoneContainer      = new Stub<>(view.findViewById(R.id.megaphone_container));
+    paymentNotificationView = new Stub<>(view.findViewById(R.id.payments_notification));
 
     Toolbar toolbar = getToolbar(view);
     toolbar.setVisibility(View.VISIBLE);
@@ -255,7 +269,7 @@ public class ConversationListFragment extends MainFragment implements ActionMode
     updateReminders();
     EventBus.getDefault().register(this);
 
-    if (TextSecurePreferences.isSmsEnabled(requireContext())) {
+    if (Util.isDefaultSmsProvider(requireContext())) {
       InsightsLauncher.showInsightsModal(requireContext(), requireFragmentManager());
     }
 
@@ -271,6 +285,11 @@ public class ConversationListFragment extends MainFragment implements ActionMode
     }
 
     SignalProxyUtil.startListeningToWebsocket();
+
+    if (SignalStore.rateLimit().needsRecaptcha()) {
+      Log.i(TAG, "Recaptcha required.");
+      RecaptchaProofBottomSheetFragment.show(getChildFragmentManager());
+    }
   }
 
   @Override
@@ -303,7 +322,7 @@ public class ConversationListFragment extends MainFragment implements ActionMode
 
   @Override
   public void onPrepareOptionsMenu(Menu menu) {
-    menu.findItem(R.id.menu_insights).setVisible(TextSecurePreferences.isSmsEnabled(requireContext()));
+    menu.findItem(R.id.menu_insights).setVisible(Util.isDefaultSmsProvider(requireContext()));
     menu.findItem(R.id.menu_clear_passphrase).setVisible(!TextSecurePreferences.isPasswordDisabled(requireContext()));
   }
 
@@ -563,6 +582,43 @@ public class ConversationListFragment extends MainFragment implements ActionMode
       @Override
       public void onBackground() { }
     };
+
+    viewModel.getUnreadPaymentsLiveData().observe(getViewLifecycleOwner(), this::onUnreadPaymentsChanged);
+  }
+
+  private void onUnreadPaymentsChanged(@NonNull Optional<UnreadPayments> unreadPayments) {
+    if (unreadPayments.isPresent()) {
+      paymentNotificationView.get().setListener(new PaymentNotificationListener(unreadPayments.get()));
+      paymentNotificationView.get().setUnreadPayments(unreadPayments.get());
+      animatePaymentUnreadStatusIn();
+    } else {
+      animatePaymentUnreadStatusOut();
+    }
+  }
+
+  private void animatePaymentUnreadStatusIn() {
+    animatePaymentUnreadStatus(ConstraintSet.VISIBLE);
+    unreadPaymentsDot.animate().alpha(1);
+  }
+
+  private void animatePaymentUnreadStatusOut() {
+    if (paymentNotificationView.resolved()) {
+      animatePaymentUnreadStatus(ConstraintSet.GONE);
+    }
+
+    unreadPaymentsDot.animate().alpha(0);
+  }
+
+  private void animatePaymentUnreadStatus(int constraintSetVisibility) {
+    paymentNotificationView.get();
+
+    TransitionManager.beginDelayedTransition(constraintLayout);
+
+    ConstraintSet currentLayout = new ConstraintSet();
+    currentLayout.clone(constraintLayout);
+
+    currentLayout.setVisibility(R.id.payments_notification, constraintSetVisibility);
+    currentLayout.applyTo(constraintLayout);
   }
 
   private void onSearchResultChanged(@Nullable SearchResult result) {
@@ -891,10 +947,7 @@ public class ConversationListFragment extends MainFragment implements ActionMode
   }
 
   private void onProxyStatusClicked() {
-    Intent intent = new Intent(requireContext(), ApplicationPreferencesActivity.class);
-    intent.putExtra(ApplicationPreferencesActivity.LAUNCH_TO_PROXY_FRAGMENT, true);
-
-    startActivity(intent);
+    startActivity(AppSettingsActivity.proxy(requireContext()));
   }
 
   protected void onPostSubmitList(int conversationCount) {
@@ -1098,6 +1151,44 @@ public class ConversationListFragment extends MainFragment implements ActionMode
         }
       }
     }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, threadId);
+  }
+
+  private class PaymentNotificationListener implements UnreadPaymentsView.Listener {
+
+    private final UnreadPayments unreadPayments;
+
+    private PaymentNotificationListener(@NonNull UnreadPayments unreadPayments) {
+      this.unreadPayments = unreadPayments;
+    }
+
+    @Override
+    public void onOpenPaymentsNotificationClicked() {
+      UUID paymentId = unreadPayments.getPaymentUuid();
+
+      if (paymentId == null) {
+        goToPaymentsHome();
+      } else {
+        goToSinglePayment(paymentId);
+      }
+    }
+
+    @Override
+    public void onClosePaymentsNotificationClicked() {
+      viewModel.onUnreadPaymentsClosed();
+    }
+
+    private void goToPaymentsHome() {
+      startActivity(new Intent(requireContext(), PaymentsActivity.class));
+    }
+
+    private void goToSinglePayment(@NonNull UUID paymentId) {
+      Intent intent = new Intent(requireContext(), PaymentsActivity.class);
+
+      intent.putExtra(PaymentsActivity.EXTRA_PAYMENTS_STARTING_ACTION, R.id.action_directly_to_paymentDetails);
+      intent.putExtra(PaymentsActivity.EXTRA_STARTING_ARGUMENTS, new PaymentDetailsFragmentArgs.Builder(PaymentDetailsParcelable.forUuid(paymentId)).build().toBundle());
+
+      startActivity(intent);
+    }
   }
 
   private class ArchiveListenerCallback extends ItemTouchHelper.SimpleCallback {

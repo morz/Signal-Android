@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit;
  */
 class JobController {
 
-  private static final String TAG = JobController.class.getSimpleName();
+  private static final String TAG = Log.tag(JobController.class);
 
   private final Application            application;
   private final JobStorage             jobStorage;
@@ -174,6 +174,23 @@ class JobController {
     Stream.of(jobStorage.getJobsInQueue(queue))
           .map(JobSpec::getId)
           .forEach(this::cancelJob);
+  }
+
+  @WorkerThread
+  synchronized void update(@NonNull JobUpdater updater) {
+    List<JobSpec> allJobs     = jobStorage.getAllJobSpecs();
+    List<JobSpec> updatedJobs = new LinkedList<>();
+
+    for (JobSpec job : allJobs) {
+      JobSpec updated = updater.update(job, dataSerializer);
+      if (updated != job) {
+        updatedJobs.add(updated);
+      }
+    }
+
+    jobStorage.updateJobs(updatedJobs);
+
+    notifyAll();
   }
 
   @WorkerThread

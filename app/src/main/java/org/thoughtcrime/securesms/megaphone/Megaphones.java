@@ -12,8 +12,8 @@ import com.annimon.stream.Stream;
 
 import org.signal.core.util.TranslationDetection;
 import org.signal.core.util.logging.Log;
-import org.thoughtcrime.securesms.ApplicationPreferencesActivity;
 import org.thoughtcrime.securesms.R;
+import org.thoughtcrime.securesms.components.settings.app.AppSettingsActivity;
 import org.thoughtcrime.securesms.conversationlist.ConversationListFragment;
 import org.thoughtcrime.securesms.database.model.MegaphoneRecord;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
@@ -29,7 +29,7 @@ import org.thoughtcrime.securesms.profiles.ProfileName;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.CommunicationActions;
 import org.thoughtcrime.securesms.util.FeatureFlags;
-import org.thoughtcrime.securesms.util.PopulationFeatureFlags;
+import org.thoughtcrime.securesms.util.LocaleFeatureFlags;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.VersionTracker;
 import org.thoughtcrime.securesms.util.dynamiclanguage.DynamicLanguageContextWrapper;
@@ -293,9 +293,7 @@ public final class Megaphones {
                             intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName());
                             controller.onMegaphoneNavigationRequested(intent);
                           } else {
-                            Intent intent = new Intent(context, ApplicationPreferencesActivity.class);
-                            intent.putExtra(ApplicationPreferencesActivity.LAUNCH_TO_NOTIFICATIONS_FRAGMENT, true);
-                            controller.onMegaphoneNavigationRequested(intent);
+                            controller.onMegaphoneNavigationRequested(AppSettingsActivity.notifications(context));
                           }
                         })
                         .setSecondaryButton(R.string.NotificationsMegaphone_not_now, (megaphone, controller) -> controller.onMegaphoneSnooze(Event.NOTIFICATIONS))
@@ -308,11 +306,11 @@ public final class Megaphones {
   }
 
   private static boolean shouldShowResearchMegaphone(@NonNull Context context) {
-    return VersionTracker.getDaysSinceFirstInstalled(context) > 7 && PopulationFeatureFlags.isInResearchMegaphone();
+    return VersionTracker.getDaysSinceFirstInstalled(context) > 7 && LocaleFeatureFlags.isInResearchMegaphone();
   }
 
   private static boolean shouldShowDonateMegaphone(@NonNull Context context) {
-    return VersionTracker.getDaysSinceFirstInstalled(context) > 7 && PopulationFeatureFlags.isInDonateMegaphone();
+    return VersionTracker.getDaysSinceFirstInstalled(context) > 7 && LocaleFeatureFlags.isInDonateMegaphone();
   }
 
   private static boolean shouldShowLinkPreviewsMegaphone(@NonNull Context context) {
@@ -320,7 +318,7 @@ public final class Megaphones {
   }
 
   private static boolean shouldShowGroupCallingMegaphone() {
-    return FeatureFlags.groupCalling();
+    return Build.VERSION.SDK_INT > 19;
   }
 
   private static boolean shouldShowOnboardingMegaphone(@NonNull Context context) {
@@ -328,8 +326,8 @@ public final class Megaphones {
   }
 
   private static boolean shouldShowNotificationsMegaphone(@NonNull Context context) {
-    boolean shouldShow = !TextSecurePreferences.isNotificationsEnabled(context)       ||
-                         !NotificationChannels.isMessageChannelEnabled(context)       ||
+    boolean shouldShow = !SignalStore.settings().isMessageNotificationsEnabled() ||
+                         !NotificationChannels.isMessageChannelEnabled(context) ||
                          !NotificationChannels.isMessagesChannelGroupEnabled(context) ||
                          !NotificationChannels.areNotificationsEnabled(context);
     if (shouldShow) {

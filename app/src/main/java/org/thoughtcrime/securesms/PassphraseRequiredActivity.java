@@ -35,7 +35,7 @@ import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import java.util.Locale;
 
 public abstract class PassphraseRequiredActivity extends BaseActivity implements MasterSecretListener {
-  private static final String TAG = PassphraseRequiredActivity.class.getSimpleName();
+  private static final String TAG = Log.tag(PassphraseRequiredActivity.class);
 
   public static final String LOCALE_EXTRA      = "locale_extra";
   public static final String NEXT_INTENT_EXTRA = "next_intent";
@@ -166,7 +166,7 @@ public abstract class PassphraseRequiredActivity extends BaseActivity implements
       return STATE_UI_BLOCKING_UPGRADE;
     } else if (!TextSecurePreferences.hasPromptedPushRegistration(this)) {
       return STATE_WELCOME_PUSH_SCREEN;
-    } else if (SignalStore.storageServiceValues().needsAccountRestore()) {
+    } else if (SignalStore.storageService().needsAccountRestore()) {
       return STATE_ENTER_SIGNAL_PIN;
     } else if (userMustSetProfileName()) {
       return STATE_CREATE_PROFILE_NAME;

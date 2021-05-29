@@ -12,12 +12,9 @@ import androidx.annotation.WorkerThread;
 
 import com.annimon.stream.Stream;
 
-import org.signal.core.util.concurrent.SignalExecutors;
 import org.signal.core.util.logging.Log;
 import org.signal.zkgroup.profiles.ProfileKeyCredential;
 import org.thoughtcrime.securesms.R;
-import org.thoughtcrime.securesms.color.MaterialColor;
-import org.thoughtcrime.securesms.contacts.avatars.ContactColors;
 import org.thoughtcrime.securesms.contacts.avatars.ContactPhoto;
 import org.thoughtcrime.securesms.contacts.avatars.FallbackContactPhoto;
 import org.thoughtcrime.securesms.contacts.avatars.GeneratedContactPhoto;
@@ -26,12 +23,16 @@ import org.thoughtcrime.securesms.contacts.avatars.ProfileContactPhoto;
 import org.thoughtcrime.securesms.contacts.avatars.ResourceContactPhoto;
 import org.thoughtcrime.securesms.contacts.avatars.SystemContactPhoto;
 import org.thoughtcrime.securesms.contacts.avatars.TransparentContactPhoto;
+import org.thoughtcrime.securesms.conversation.colors.AvatarColor;
+import org.thoughtcrime.securesms.conversation.colors.ChatColors;
+import org.thoughtcrime.securesms.conversation.colors.ChatColorsPalette;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.RecipientDatabase;
 import org.thoughtcrime.securesms.database.RecipientDatabase.MentionSetting;
 import org.thoughtcrime.securesms.database.RecipientDatabase.RegisteredState;
 import org.thoughtcrime.securesms.database.RecipientDatabase.UnidentifiedAccessMode;
 import org.thoughtcrime.securesms.database.RecipientDatabase.VibrateState;
+import org.thoughtcrime.securesms.database.model.databaseprotos.RecipientExtras;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.groups.GroupId;
 import org.thoughtcrime.securesms.keyvalue.SignalStore;
@@ -83,7 +84,6 @@ public class Recipient {
   private final VibrateState           callVibrate;
   private final Uri                    messageRingtone;
   private final Uri                    callRingtone;
-  private final MaterialColor          color;
   private final Optional<Integer>      defaultSubscriptionId;
   private final int                    expireMessages;
   private final RegisteredState        registered;
@@ -107,11 +107,14 @@ public class Recipient {
   private final byte[]                 storageId;
   private final MentionSetting         mentionSetting;
   private final ChatWallpaper          wallpaper;
+  private final ChatColors             chatColors;
+  private final AvatarColor            avatarColor;
   private final String                 about;
   private final String                 aboutEmoji;
   private final ProfileName            systemProfileName;
   private final String                 systemContactName;
-
+  private final Optional<Extras>       extras;
+  private final boolean                hasGroupsInCommon;
 
   /**
    * Returns a {@link LiveRecipient}, which contains a {@link Recipient} that may or may not be
@@ -214,7 +217,14 @@ public class Recipient {
     RecipientDatabase db          = DatabaseFactory.getRecipientDatabase(context);
     RecipientId       recipientId = db.getAndPossiblyMerge(uuid, e164, highTrust);
 
-    return resolved(recipientId);
+    Recipient resolved = resolved(recipientId);
+
+    if (highTrust && !resolved.isRegistered()) {
+      Log.w(TAG, "External high-trust push was locally marked unregistered. Marking as registered.");
+      db.markRegistered(recipientId);
+    }
+
+    return resolved;
   }
 
   /**
@@ -321,7 +331,6 @@ public class Recipient {
     this.callVibrate                 = VibrateState.DEFAULT;
     this.messageRingtone             = null;
     this.callRingtone                = null;
-    this.color                       = null;
     this.insightsBannerTier          = InsightsBannerTier.TIER_TWO;
     this.defaultSubscriptionId       = Optional.absent();
     this.expireMessages              = 0;
@@ -345,10 +354,14 @@ public class Recipient {
     this.storageId                   = null;
     this.mentionSetting              = MentionSetting.ALWAYS_NOTIFY;
     this.wallpaper                   = null;
+    this.chatColors                  = null;
+    this.avatarColor                 = AvatarColor.UNKNOWN;
     this.about                       = null;
     this.aboutEmoji                  = null;
     this.systemProfileName           = ProfileName.EMPTY;
     this.systemContactName           = null;
+    this.extras                      = Optional.absent();
+    this.hasGroupsInCommon           = false;
   }
 
   public Recipient(@NonNull RecipientId id, @NonNull RecipientDetails details, boolean resolved) {
@@ -368,7 +381,6 @@ public class Recipient {
     this.callVibrate                 = details.callVibrateState;
     this.messageRingtone             = details.messageRingtone;
     this.callRingtone                = details.callRingtone;
-    this.color                       = details.color;
     this.insightsBannerTier          = details.insightsBannerTier;
     this.defaultSubscriptionId       = details.defaultSubscriptionId;
     this.expireMessages              = details.expireMessages;
@@ -392,10 +404,14 @@ public class Recipient {
     this.storageId                   = details.storageId;
     this.mentionSetting              = details.mentionSetting;
     this.wallpaper                   = details.wallpaper;
+    this.chatColors                  = details.chatColors;
+    this.avatarColor                 = details.avatarColor;
     this.about                       = details.about;
     this.aboutEmoji                  = details.aboutEmoji;
     this.systemProfileName           = details.systemProfileName;
     this.systemContactName           = details.systemContactName;
+    this.extras                      = details.extras;
+    this.hasGroupsInCommon           = details.hasGroupsInCommon;
   }
 
   public @NonNull RecipientId getId() {
@@ -543,24 +559,6 @@ public class Recipient {
     return StringUtil.isolateBidi(name);
   }
 
-  public @NonNull MaterialColor getColor() {
-    if (isGroupInternal()) {
-      return MaterialColor.GROUP;
-    } else if (color != null) {
-      return color;
-     } else if (groupName != null || profileSharing) {
-      Log.w(TAG, "Had no color for " + id + "! Saving a new one.");
-
-      Context       context = ApplicationDependencies.getApplication();
-      MaterialColor color   = ContactColors.generateFor(getDisplayName(context));
-
-      SignalExecutors.BOUNDED.execute(() -> DatabaseFactory.getRecipientDatabase(context).setColorIfNotSet(id, color));
-      return color;
-    } else {
-      return ContactColors.UNKNOWN_COLOR;
-    }
-  }
-
   public @NonNull Optional<UUID> getUuid() {
     return Optional.fromNullable(uuid);
   }
@@ -642,6 +640,10 @@ public class Recipient {
 
   public boolean hasUuid() {
     return getUuid().isPresent();
+  }
+
+  public boolean isUuidOnly() {
+    return hasUuid() && !hasSmsAddress();
   }
 
   public @NonNull GroupId requireGroupId() {
@@ -758,11 +760,11 @@ public class Recipient {
   }
 
   public @NonNull Drawable getFallbackContactPhotoDrawable(Context context, boolean inverted, @Nullable FallbackPhotoProvider fallbackPhotoProvider) {
-    return getFallbackContactPhoto(Util.firstNonNull(fallbackPhotoProvider, DEFAULT_FALLBACK_PHOTO_PROVIDER)).asDrawable(context, getColor().toAvatarColor(context), inverted);
+    return getFallbackContactPhoto(Util.firstNonNull(fallbackPhotoProvider, DEFAULT_FALLBACK_PHOTO_PROVIDER)).asDrawable(context, avatarColor.colorInt(), inverted);
   }
 
   public @NonNull Drawable getSmallFallbackContactPhotoDrawable(Context context, boolean inverted, @Nullable FallbackPhotoProvider fallbackPhotoProvider) {
-    return getFallbackContactPhoto(Util.firstNonNull(fallbackPhotoProvider, DEFAULT_FALLBACK_PHOTO_PROVIDER)).asSmallDrawable(context, getColor().toAvatarColor(context), inverted);
+    return getFallbackContactPhoto(Util.firstNonNull(fallbackPhotoProvider, DEFAULT_FALLBACK_PHOTO_PROVIDER)).asSmallDrawable(context, avatarColor.colorInt(), inverted);
   }
 
   public @NonNull FallbackContactPhoto getFallbackContactPhoto() {
@@ -770,12 +772,14 @@ public class Recipient {
   }
 
   public @NonNull FallbackContactPhoto getFallbackContactPhoto(@NonNull FallbackPhotoProvider fallbackPhotoProvider) {
-    if      (isSelf)                        return fallbackPhotoProvider.getPhotoForLocalNumber();
-    else if (isResolving())                 return fallbackPhotoProvider.getPhotoForResolvingRecipient();
-    else if (isGroupInternal())             return fallbackPhotoProvider.getPhotoForGroup();
-    else if (isGroup())                     return fallbackPhotoProvider.getPhotoForGroup();
-    else if (!TextUtils.isEmpty(groupName)) return fallbackPhotoProvider.getPhotoForRecipientWithName(groupName);
-    else                                    return fallbackPhotoProvider.getPhotoForRecipientWithoutName();
+    if      (isSelf)                                return fallbackPhotoProvider.getPhotoForLocalNumber();
+    else if (isResolving())                         return fallbackPhotoProvider.getPhotoForResolvingRecipient();
+    else if (isGroupInternal())                     return fallbackPhotoProvider.getPhotoForGroup();
+    else if (isGroup())                             return fallbackPhotoProvider.getPhotoForGroup();
+    else if (!TextUtils.isEmpty(groupName))         return fallbackPhotoProvider.getPhotoForRecipientWithName(groupName);
+    else if (!TextUtils.isEmpty(systemContactName)) return fallbackPhotoProvider.getPhotoForRecipientWithName(systemContactName);
+    else if (!signalProfileName.isEmpty())          return fallbackPhotoProvider.getPhotoForRecipientWithName(signalProfileName.toString());
+    else                                            return fallbackPhotoProvider.getPhotoForRecipientWithoutName();
   }
 
   public @Nullable ContactPhoto getContactPhoto() {
@@ -901,6 +905,36 @@ public class Recipient {
     return wallpaper != null || SignalStore.wallpaper().hasWallpaperSet();
   }
 
+  public boolean hasOwnChatColors() {
+    return chatColors != null;
+  }
+
+  public @NonNull ChatColors getChatColors() {
+    if (chatColors != null && chatColors.getId() instanceof ChatColors.Id.Auto) {
+      return getAutoChatColor();
+    } else if (chatColors != null) {
+      return chatColors;
+    } else if (SignalStore.chatColorsValues().hasChatColors()) {
+      return Objects.requireNonNull(SignalStore.chatColorsValues().getChatColors());
+    } else {
+      return getAutoChatColor();
+    }
+  }
+
+  private @NonNull ChatColors getAutoChatColor() {
+    if (wallpaper != null) {
+      return wallpaper.getAutoChatColors();
+    } else if (getWallpaper() != null) {
+      return getWallpaper().getAutoChatColors();
+    } else {
+      return ChatColorsPalette.Bubbles.getDefault().withId(ChatColors.Id.Auto.INSTANCE);
+    }
+  }
+
+  public @NonNull AvatarColor getAvatarColor() {
+    return avatarColor;
+  }
+
   public boolean isSystemContact() {
     return contactUri != null;
   }
@@ -925,6 +959,18 @@ public class Recipient {
     } else {
       return null;
     }
+  }
+
+  public boolean shouldBlurAvatar() {
+    boolean showOverride = false;
+    if (extras.isPresent()) {
+      showOverride = extras.get().manuallyShownAvatar();
+    }
+    return !showOverride && !isSelf() && !isProfileSharing() && !isSystemContact() && !hasGroupsInCommon && isRegistered();
+  }
+
+  public boolean hasGroupsInCommon() {
+    return hasGroupsInCommon;
   }
 
   /**
@@ -971,7 +1017,6 @@ public class Recipient {
     return Objects.hash(id);
   }
 
-
   public enum Capability {
     UNKNOWN(0),
     SUPPORTED(1),
@@ -1001,6 +1046,39 @@ public class Recipient {
     }
   }
 
+  public static final class Extras {
+    private final RecipientExtras recipientExtras;
+
+    public static @Nullable Extras from(@Nullable RecipientExtras recipientExtras) {
+      if (recipientExtras != null) {
+        return new Extras(recipientExtras);
+      } else {
+        return null;
+      }
+    }
+
+    private Extras(@NonNull RecipientExtras extras) {
+      this.recipientExtras = extras;
+    }
+
+    public boolean manuallyShownAvatar() {
+      return recipientExtras.getManuallyShownAvatar();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      final Extras that = (Extras) o;
+      return manuallyShownAvatar() == that.manuallyShownAvatar();
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(manuallyShownAvatar());
+    }
+  }
+
   public boolean hasSameContent(@NonNull Recipient other) {
     return Objects.equals(id, other.id) &&
            resolving == other.resolving &&
@@ -1024,7 +1102,6 @@ public class Recipient {
            callVibrate == other.callVibrate &&
            Objects.equals(messageRingtone, other.messageRingtone) &&
            Objects.equals(callRingtone, other.callRingtone) &&
-           color == other.color &&
            Objects.equals(defaultSubscriptionId, other.defaultSubscriptionId) &&
            registered == other.registered &&
            Arrays.equals(profileKey, other.profileKey) &&
@@ -1044,8 +1121,11 @@ public class Recipient {
            Arrays.equals(storageId, other.storageId) &&
            mentionSetting == other.mentionSetting &&
            Objects.equals(wallpaper, other.wallpaper) &&
+           Objects.equals(chatColors, other.chatColors) &&
+           Objects.equals(avatarColor, other.avatarColor) &&
            Objects.equals(about, other.about) &&
-           Objects.equals(aboutEmoji, other.aboutEmoji);
+           Objects.equals(aboutEmoji, other.aboutEmoji) &&
+           Objects.equals(extras, other.extras);
   }
 
   private static boolean allContentsAreTheSame(@NonNull List<Recipient> a, @NonNull List<Recipient> b) {

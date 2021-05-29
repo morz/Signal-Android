@@ -12,6 +12,7 @@ import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobmanager.Data;
 import org.thoughtcrime.securesms.jobmanager.Job;
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
+import org.thoughtcrime.securesms.net.NotPushRegisteredException;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
@@ -31,7 +32,7 @@ public class TypingSendJob extends BaseJob {
 
   public static final String KEY = "TypingSendJob";
 
-  private static final String TAG = TypingSendJob.class.getSimpleName();
+  private static final String TAG = Log.tag(TypingSendJob.class);
 
   private static final String KEY_THREAD_ID = "thread_id";
   private static final String KEY_TYPING    = "typing";
@@ -77,6 +78,10 @@ public class TypingSendJob extends BaseJob {
 
   @Override
   public void onRun() throws Exception {
+    if (!Recipient.self().isRegistered()) {
+      throw new NotPushRegisteredException();
+    }
+
     if (!TextSecurePreferences.isTypingIndicatorsEnabled(context)) {
       return;
     }

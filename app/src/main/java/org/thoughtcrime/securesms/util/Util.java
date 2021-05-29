@@ -66,7 +66,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class Util {
-  private static final String TAG = Util.class.getSimpleName();
+  private static final String TAG = Log.tag(Util.class);
 
   private static final long BUILD_LIFESPAN = TimeUnit.DAYS.toMillis(90);
 
@@ -405,6 +405,10 @@ public class Util {
 
   public static <T> T getRandomElement(T[] elements) {
     return elements[new SecureRandom().nextInt(elements.length)];
+  }
+
+  public static <T> T getRandomElement(List<T> elements) {
+    return elements.get(new SecureRandom().nextInt(elements.size()));
   }
 
   public static boolean equals(@Nullable Object a, @Nullable Object b) {

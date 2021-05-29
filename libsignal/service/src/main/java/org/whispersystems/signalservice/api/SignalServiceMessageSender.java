@@ -42,21 +42,26 @@ import org.whispersystems.signalservice.api.messages.multidevice.BlockedListMess
 import org.whispersystems.signalservice.api.messages.multidevice.ConfigurationMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.KeysMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.MessageRequestResponseMessage;
+import org.whispersystems.signalservice.api.messages.multidevice.OutgoingPaymentMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.ReadMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.SentTranscriptMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.SignalServiceSyncMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.StickerPackOperationMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.VerifiedMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.ViewOnceOpenMessage;
+import org.whispersystems.signalservice.api.messages.multidevice.ViewedMessage;
 import org.whispersystems.signalservice.api.messages.shared.SharedContact;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 import org.whispersystems.signalservice.api.push.exceptions.AuthorizationFailedException;
 import org.whispersystems.signalservice.api.push.exceptions.MalformedResponseException;
 import org.whispersystems.signalservice.api.push.exceptions.NonSuccessfulResponseCodeException;
+import org.whispersystems.signalservice.api.push.exceptions.ProofRequiredException;
 import org.whispersystems.signalservice.api.push.exceptions.PushNetworkException;
 import org.whispersystems.signalservice.api.push.exceptions.ServerRejectedException;
 import org.whispersystems.signalservice.api.push.exceptions.UnregisteredUserException;
 import org.whispersystems.signalservice.api.util.CredentialsProvider;
+import org.whispersystems.signalservice.api.util.Uint64RangeException;
+import org.whispersystems.signalservice.api.util.Uint64Util;
 import org.whispersystems.signalservice.internal.configuration.SignalServiceConfiguration;
 import org.whispersystems.signalservice.internal.crypto.PaddingInputStream;
 import org.whispersystems.signalservice.internal.push.AttachmentV2UploadAttributes;
@@ -64,6 +69,7 @@ import org.whispersystems.signalservice.internal.push.AttachmentV3UploadAttribut
 import org.whispersystems.signalservice.internal.push.MismatchedDevices;
 import org.whispersystems.signalservice.internal.push.OutgoingPushMessage;
 import org.whispersystems.signalservice.internal.push.OutgoingPushMessageList;
+import org.whispersystems.signalservice.internal.push.ProofRequiredResponse;
 import org.whispersystems.signalservice.internal.push.ProvisioningProtos;
 import org.whispersystems.signalservice.internal.push.PushAttachmentData;
 import org.whispersystems.signalservice.internal.push.PushServiceSocket;
@@ -88,11 +94,13 @@ import org.whispersystems.signalservice.internal.push.http.ResumableUploadSpec;
 import org.whispersystems.signalservice.internal.util.StaticCredentialsProvider;
 import org.whispersystems.signalservice.internal.util.Util;
 import org.whispersystems.util.Base64;
+import org.whispersystems.util.FlagUtil;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -350,6 +358,8 @@ public class SignalServiceMessageSender {
       content = createMultiDeviceGroupsContent(message.getGroups().get().asStream());
     } else if (message.getRead().isPresent()) {
       content = createMultiDeviceReadContent(message.getRead().get());
+    } else if (message.getViewed().isPresent()) {
+      content = createMultiDeviceViewedContent(message.getViewed().get());
     } else if (message.getViewOnceOpen().isPresent()) {
       content = createMultiDeviceViewOnceOpenContent(message.getViewOnceOpen().get());
     } else if (message.getBlockedList().isPresent()) {
@@ -364,6 +374,8 @@ public class SignalServiceMessageSender {
       content = createMultiDeviceFetchTypeContent(message.getFetchType().get());
     } else if (message.getMessageRequestResponse().isPresent()) {
       content = createMultiDeviceMessageRequestResponseContent(message.getMessageRequestResponse().get());
+    } else if (message.getOutgoingPaymentMessage().isPresent()) {
+      content = createMultiDeviceOutgoingPaymentContent(message.getOutgoingPaymentMessage().get());
     } else if (message.getKeys().isPresent()) {
       content = createMultiDeviceSyncKeysContent(message.getKeys().get());
     } else if (message.getVerified().isPresent()) {
@@ -447,6 +459,7 @@ public class SignalServiceMessageSender {
                                               attachment.getFileName(),
                                               attachment.getVoiceNote(),
                                               attachment.isBorderless(),
+                                              attachment.isGif(),
                                               attachment.getCaption(),
                                               attachment.getBlurHash(),
                                               attachment.getUploadTimestamp());
@@ -487,6 +500,7 @@ public class SignalServiceMessageSender {
                                               attachment.getFileName(),
                                               attachment.getVoiceNote(),
                                               attachment.isBorderless(),
+                                              attachment.isGif(),
                                               attachment.getCaption(),
                                               attachment.getBlurHash(),
                                               attachment.getUploadTimestamp());
@@ -748,6 +762,21 @@ public class SignalServiceMessageSender {
       builder.setGroupCallUpdate(DataMessage.GroupCallUpdate.newBuilder().setEraId(message.getGroupCallUpdate().get().getEraId()));
     }
 
+    if (message.getPayment().isPresent()) {
+      SignalServiceDataMessage.Payment payment = message.getPayment().get();
+
+      if (payment.getPaymentNotification().isPresent()) {
+        SignalServiceDataMessage.PaymentNotification        paymentNotification = payment.getPaymentNotification().get();
+        DataMessage.Payment.Notification.MobileCoin.Builder mobileCoinPayment   = DataMessage.Payment.Notification.MobileCoin.newBuilder().setReceipt(ByteString.copyFrom(paymentNotification.getReceipt()));
+        DataMessage.Payment.Notification.Builder            paymentBuilder      = DataMessage.Payment.Notification.newBuilder()
+                                                                                                                  .setNote(paymentNotification.getNote())
+                                                                                                                  .setMobileCoin(mobileCoinPayment);
+
+        builder.setPayment(DataMessage.Payment.newBuilder().setNotification(paymentBuilder));
+        builder.setRequiredProtocolVersion(Math.max(DataMessage.ProtocolVersion.PAYMENTS_VALUE, builder.getRequiredProtocolVersion()));
+      }
+    }
+
     builder.setTimestamp(message.getTimestamp());
 
     return enforceMaxContentSize(container.setDataMessage(builder).build().toByteArray());
@@ -849,6 +878,7 @@ public class SignalServiceMessageSender {
   private byte[] createMultiDeviceGroupsContent(SignalServiceAttachmentStream groups) throws IOException {
     Content.Builder     container = Content.newBuilder();
     SyncMessage.Builder builder   = createSyncMessageBuilder();
+
     builder.setGroups(SyncMessage.Groups.newBuilder()
                                         .setBlob(createAttachmentPointer(groups)));
 
@@ -935,6 +965,27 @@ public class SignalServiceMessageSender {
       }
 
       builder.addRead(readBuilder.build());
+    }
+
+    return container.setSyncMessage(builder).build().toByteArray();
+  }
+
+  private byte[] createMultiDeviceViewedContent(List<ViewedMessage> readMessages) {
+    Content.Builder     container = Content.newBuilder();
+    SyncMessage.Builder builder   = createSyncMessageBuilder();
+
+    for (ViewedMessage readMessage : readMessages) {
+      SyncMessage.Viewed.Builder viewedBuilder = SyncMessage.Viewed.newBuilder().setTimestamp(readMessage.getTimestamp());
+
+      if (readMessage.getSender().getUuid().isPresent()) {
+        viewedBuilder.setSenderUuid(readMessage.getSender().getUuid().get().toString());
+      }
+
+      if (readMessage.getSender().getNumber().isPresent()) {
+        viewedBuilder.setSenderE164(readMessage.getSender().getNumber().get());
+      }
+
+      builder.addViewed(viewedBuilder.build());
     }
 
     return container.setSyncMessage(builder).build().toByteArray();
@@ -1091,6 +1142,43 @@ public class SignalServiceMessageSender {
     }
 
     syncMessage.setMessageRequestResponse(responseMessage);
+
+    return container.setSyncMessage(syncMessage).build().toByteArray();
+  }
+
+  private byte[] createMultiDeviceOutgoingPaymentContent(OutgoingPaymentMessage message) {
+    Content.Builder                     container      = Content.newBuilder();
+    SyncMessage.Builder                 syncMessage    = createSyncMessageBuilder();
+    SyncMessage.OutgoingPayment.Builder paymentMessage = SyncMessage.OutgoingPayment.newBuilder();
+
+    if (message.getRecipient().isPresent()) {
+      paymentMessage.setRecipientUuid(message.getRecipient().get().toString());
+    }
+
+    if (message.getNote().isPresent()) {
+      paymentMessage.setNote(message.getNote().get());
+    }
+
+    try {
+      SyncMessage.OutgoingPayment.MobileCoin.Builder mobileCoinBuilder = SyncMessage.OutgoingPayment.MobileCoin.newBuilder();
+
+      if (message.getAddress().isPresent()) {
+        mobileCoinBuilder.setRecipientAddress(ByteString.copyFrom(message.getAddress().get()));
+      }
+      mobileCoinBuilder.setAmountPicoMob(Uint64Util.bigIntegerToUInt64(message.getAmount().toPicoMobBigInteger()))
+                       .setFeePicoMob(Uint64Util.bigIntegerToUInt64(message.getFee().toPicoMobBigInteger()))
+                       .setReceipt(message.getReceipt())
+                       .setLedgerBlockTimestamp(message.getBlockTimestamp())
+                       .setLedgerBlockIndex(message.getBlockIndex())
+                       .addAllOutputPublicKeys(message.getPublicKeys())
+                       .addAllSpentKeyImages(message.getKeyImages());
+
+      paymentMessage.setMobileCoin(mobileCoinBuilder);
+    } catch (Uint64RangeException e) {
+      throw new AssertionError(e);
+    }
+
+    syncMessage.setOutgoingPayment(paymentMessage);
 
     return container.setSyncMessage(syncMessage).build().toByteArray();
   }
@@ -1339,6 +1427,9 @@ public class SignalServiceMessageSender {
         } else if (e.getCause() instanceof ServerRejectedException) {
           Log.w(TAG, e);
           throw ((ServerRejectedException) e.getCause());
+        } else if (e.getCause() instanceof ProofRequiredException) {
+          Log.w(TAG, e);
+          results.add(SendMessageResult.proofRequiredFailure(recipient, (ProofRequiredException) e.getCause()));
         } else {
           throw new IOException(e);
         }
@@ -1496,13 +1587,21 @@ public class SignalServiceMessageSender {
       builder.setHeight(attachment.getHeight());
     }
 
+    int flags = 0;
+
     if (attachment.getVoiceNote()) {
-      builder.setFlags(AttachmentPointer.Flags.VOICE_MESSAGE_VALUE);
+      flags |= FlagUtil.toBinaryFlag(AttachmentPointer.Flags.VOICE_MESSAGE_VALUE);
     }
 
     if (attachment.isBorderless()) {
-      builder.setFlags(AttachmentPointer.Flags.BORDERLESS_VALUE);
+      flags |= FlagUtil.toBinaryFlag(AttachmentPointer.Flags.BORDERLESS_VALUE);
     }
+
+    if (attachment.isGif()) {
+      flags |= FlagUtil.toBinaryFlag(AttachmentPointer.Flags.GIF_VALUE);
+    }
+
+    builder.setFlags(flags);
 
     if (attachment.getCaption().isPresent()) {
       builder.setCaption(attachment.getCaption().get());

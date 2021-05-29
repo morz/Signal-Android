@@ -89,7 +89,6 @@
   <string name="BlockUnblockDialog_unblock_s">%1$s کو غیر مسدود کریں؟</string>
   <string name="BlockUnblockDialog_block">بلاک</string>
   <string name="BlockUnblockDialog_block_and_leave">مسدود اور چھوڑو</string>
-  <string name="BlockUnblockDialog_block_and_delete">بلاک کریں اور حذف کریں</string>
   <!--BucketedThreadMedia-->
   <string name="BucketedThreadMedia_Today">آج</string>
   <string name="BucketedThreadMedia_Yesterday">کل</string>
@@ -605,7 +604,6 @@
   <string name="ManageGroupActivity_mute_notifications">خاموش اطلاعات</string>
   <string name="ManageGroupActivity_custom_notifications">اپنی مرضی کے مطابق اطلاعات</string>
   <string name="ManageGroupActivity_mentions">ذکر</string>
-  <string name="ManageGroupActivity_chat_wallpaper">چیٹ وال پیپر</string>
   <string name="ManageGroupActivity_until_s">جب تک %1$s</string>
   <string name="ManageGroupActivity_off">بند کریں</string>
   <string name="ManageGroupActivity_on">چلائیں</string>
@@ -966,6 +964,7 @@
   <string name="MessageRecord_you_changed_the_group_name_to_s">آپ نے گروپ کا نام تبدیل کرکے \"%1$s\" کردیا۔</string>
   <string name="MessageRecord_s_changed_the_group_name_to_s">%1$s نے گروپ کا نام تبدیل کرکے \"%2$s\" کردیا۔</string>
   <string name="MessageRecord_the_group_name_has_changed_to_s">گروپ کا نام تبدیل کر کے \"%1$s\" کر دیا گیا ہے۔</string>
+  <!--GV2 description change-->
   <!--GV2 avatar change-->
   <string name="MessageRecord_you_changed_the_group_avatar">آپ نے گروپ کا اوتار بدلا۔</string>
   <string name="MessageRecord_s_changed_the_group_avatar">%1$s نے گروپ کا اوتار بدلا۔</string>
@@ -1057,6 +1056,7 @@
   <string name="MessageRequestBottomView_do_you_want_to_join_this_group_they_wont_know_youve_seen_their_messages_until_you_accept">اس گروپ میں شامل ہوں اور اس کے ممبروں کے ساتھ اپنا نام اور تصویر بانٹیں؟ جب تک آپ ان کو قبول نہیں کرتے ان کو معلوم نہیں ہوگا کہ آپ نے ان کے پیغامات دیکھے ہیں۔</string>
   <string name="MessageRequestBottomView_join_this_group_they_wont_know_youve_seen_their_messages_until_you_accept">اس گروپ میں شامل ہوں؟ جب تک آپ ان کو قبول نہ کریں تب تک وہ نہیں جانیں گے کہ آپ نے ان کے پیغامات دیکھے ہیں۔</string>
   <string name="MessageRequestBottomView_unblock_this_group_and_share_your_name_and_photo_with_its_members">اس گروپ کو غیر مسدود کریں اور اس کے ممبروں کے ساتھ اپنا نام اور تصویر شئیر کریں؟ آپ کو کوئی پیغامات موصول نہیں ہوگا جب تک کہ آپ ان کو بلاک نہیں کردیں گے۔</string>
+  <string name="MessageRequestProfileView_view">دیکھیں</string>
   <string name="MessageRequestProfileView_member_of_one_group">کا رکن%1$s</string>
   <string name="MessageRequestProfileView_member_of_two_groups">ممبر%1$s اور%2$s</string>
   <string name="MessageRequestProfileView_member_of_many_groups">کے ممبر%1$s ، %2$sاور%3$s</string>
@@ -1095,10 +1095,6 @@
   <string name="DeviceProvisioningActivity_it_looks_like_youre_trying_to_link_a_signal_device_using_a_3rd_party_scanner">ایسا لگتا ہے کہ آپ 3rd پارٹی اسکینر کا استعمال کرتے ہوئے Signal ڈیوائس سے منسلک کرنے کی کوشش کر رہے ہیں۔ آپ کے تحفظ کے لئے ، براہ کرم Signal میں سے دوبارہ کوڈ اسکین کریں۔</string>
   <string name="DeviceActivity_signal_needs_the_camera_permission_in_order_to_scan_a_qr_code">Signal کو QR کوڈ سکین کرنے کیلئے کیمرہ کی اجازت کی ضرورت ہے، لیکن اس کو مستقل طور پر رد کر دیا گیا۔ براہ کرم ایپ کی ترتیبات میں جا کر\"اجازت نامہ\"کا انتخاب کریں اور \"کیمرہ\" کو فعال کریں۔</string>
   <string name="DeviceActivity_unable_to_scan_a_qr_code_without_the_camera_permission">کیمرہ کی اجازت کے بغیر QR کوڈ سکین کرنا ممکن نہیں</string>
-  <!--ExpirationDialog-->
-  <string name="ExpirationDialog_disappearing_messages">پیغامات غائب ہو رہے ہیں</string>
-  <string name="ExpirationDialog_your_messages_will_not_expire">آپ کے پیغامات کی میعاد ختم نہیں ہوگی۔</string>
-  <string name="ExpirationDialog_your_messages_will_disappear_s_after_they_have_been_seen">اس گفتگو میں بھیجے اور وصول کیے گیں پیغامات دیکھنے کے بعد %s ختم ہوجائیں گے۔</string>
   <!--OutdatedBuildReminder-->
   <string name="OutdatedBuildReminder_update_now">تازہ ترین کریں. </string>
   <string name="OutdatedBuildReminder_your_version_of_signal_will_expire_today">Signal کا یہ ورژن آج ختم ہوجائے گا۔ تازہ ترین ورژن میں تازہ کاری کریں۔</string>
@@ -1156,6 +1152,7 @@
   <string name="ReactionsConversationView_plus">+%1$d</string>
   <!--ReactionsRecipientAdapter-->
   <string name="ReactionsRecipientAdapter_you">آپ</string>
+  <!--RecaptchaRequiredBottomSheetFragment-->
   <!--RecipientPreferencesActivity-->
   <string name="RecipientPreferenceActivity_block">بلاک</string>
   <string name="RecipientPreferenceActivity_unblock">ان بلاک</string>
@@ -1208,12 +1205,14 @@
   <string name="CallParticipantView__cant_receive_audio_video_from_s">آڈیو وصول نہیں کر سکتے ہیں۔ %1$s سے ویڈیو</string>
   <string name="CallParticipantView__cant_receive_audio_and_video_from_s">%1$s سے آڈیو اور ویڈیو موصول نہیں ہوسکتی ہے</string>
   <string name="CallParticipantView__this_may_be_Because_they_have_not_verified_your_safety_number_change">اس کی وجہ یہ ہوسکتی ہے کہ انہوں نے آپ کے حفاظتی نمبر میں تبدیلی کی توثیق نہیں کی ہے ، ان کے آلے میں کوئی مسئلہ ہے یا انہوں نے آپ کو مسدود کردیا ہے۔</string>
+  <!--CallToastPopupWindow-->
   <!--ProxyBottomSheetFragment-->
   <string name="ProxyBottomSheetFragment_proxy_server">پراکسی سرور</string>
   <string name="ProxyBottomSheetFragment_proxy_address">پراکسی ایڈریس</string>
   <string name="ProxyBottomSheetFragment_do_you_want_to_use_this_proxy_address">کیا آپ یہ پراکسی ایڈریس استعمال کرنا چاہتے ہیں؟</string>
   <string name="ProxyBottomSheetFragment_use_proxy">پروکسی استعمال کرو</string>
   <string name="ProxyBottomSheetFragment_successfully_connected_to_proxy">پراکسی سے کامیابی کے ساتھ منسلک ہوا۔</string>
+  <!--RecaptchaProofActivity-->
   <!--RegistrationActivity-->
   <string name="RegistrationActivity_select_your_country">اپنے ملک کا انتخاب کریں</string>
   <string name="RegistrationActivity_you_must_specify_your_country_code">آپ لازمی ملک کا کوڈ واضع کریں</string>
@@ -1458,16 +1457,17 @@
   <string name="MessageNotifier_this_message_was_deleted">یہ پیغام حذف کردیا گیا تھا۔</string>
   <string name="TurnOffContactJoinedNotificationsActivity__turn_off_contact_joined_signal">رابطے میں شامل Signal اطلاعات بند کردیں؟ آپ انہیں Signal &amp; gt میں دوبارہ فعال کرسکتے ہیں۔ ترتیبات &amp; gt؛ اطلاعات۔</string>
   <!--Notification Channels-->
-  <string name="NotificationChannel_messages">پہلے سے طے شدہ</string>
+  <string name="NotificationChannel_channel_messages">پیغامات</string>
   <string name="NotificationChannel_calls">کالز</string>
   <string name="NotificationChannel_failures">ناکامیاں</string>
   <string name="NotificationChannel_backups">بیک اپس</string>
   <string name="NotificationChannel_locked_status">اسٹیٹس لاک کریں</string>
   <string name="NotificationChannel_app_updates">ایپ تجدید کریں</string>
   <string name="NotificationChannel_other">دوسرے</string>
-  <string name="NotificationChannel_group_messages">پیغامات</string>
+  <string name="NotificationChannel_group_chats">باتیں</string>
   <string name="NotificationChannel_missing_display_name">نامعلوم</string>
   <string name="NotificationChannel_voice_notes">آڈیو نوٹز</string>
+  <string name="NotificationChannel_contact_joined_signal">رابطہ Signal میں شامل ہو گیا</string>
   <!--ProfileEditNameFragment-->
   <!--QuickResponseService-->
   <string name="QuickResponseService_quick_response_unavailable_when_Signal_is_locked">جب Signal  لاک ہو فوری جواب دستیاب نہیں!</string>
@@ -1483,6 +1483,7 @@
   <!--SingleRecipientNotificationBuilder-->
   <string name="SingleRecipientNotificationBuilder_signal">Signal</string>
   <string name="SingleRecipientNotificationBuilder_new_message">نيا پیغام</string>
+  <string name="SingleRecipientNotificationBuilder_you">آپ</string>
   <!--ThumbnailView-->
   <string name="ThumbnailView_Play_video_description">ویڈیو چلائیں</string>
   <string name="ThumbnailView_Has_a_caption_description">ایک عنوان ہے</string>
@@ -1588,6 +1589,7 @@
   <string name="ConversationUpdateItem_return_to_call">کال پر واپس جائیں</string>
   <string name="ConversationUpdateItem_call_is_full">کال پوری ہے</string>
   <string name="ConversationUpdateItem_invite_friends">دوستوں کو مدعو کریں</string>
+  <string name="ConversationUpdateItem_view">دیکھیں</string>
   <!--audio_view-->
   <string name="audio_view__play_pause_accessibility_description">چلائیں ۔۔۔ روکیں</string>
   <string name="audio_view__download_accessibility_description">ڈاؤن لوڈ کریں</string>
@@ -1611,6 +1613,8 @@
   <string name="safety_number_change_dialog__the_following_people_may_have_reinstalled_or_changed_devices">مندرجہ ذیل لوگوں نے انسٹال یا ان میں تبدیلیاں کی ہیں۔ رازداری کو یقینی بنانے کے لیئے ان کے ساتھ اپنے حفاظتی نمبر کی تصدیق کریں۔</string>
   <string name="safety_number_change_dialog__view">دیکھیں</string>
   <string name="safety_number_change_dialog__previous_verified">پچھلی تصدیق شدہ</string>
+  <!--EnableCallNotificationSettingsDialog__call_notifications_checklist-->
+  <string name="EnableCallNotificationSettingsDialog__settings">ترتیبات</string>
   <!--country_selection_fragment-->
   <string name="country_selection_fragment__loading_countries">ملک لوڈ ہو رہے ہیں۔۔۔</string>
   <string name="country_selection_fragment__search">تلا ‎ش کر یں</string>
@@ -1665,7 +1669,6 @@
     <item quantity="other">%dدوسرے</item>
   </plurals>
   <!--giphy_activity-->
-  <string name="giphy_activity_toolbar__search_gifs_and_stickers">گفس اور اسٹیکرز تلاش کریں</string>
   <!--giphy_fragment-->
   <string name="giphy_fragment__nothing_found">کچھ نہیں ملا</string>
   <!--log_submit_activity-->
@@ -1715,7 +1718,7 @@
   <string name="EditAboutFragment_taking_a_break">ایک وقفے پر</string>
   <string name="EditAboutFragment_working_on_something_new">کسی نئی چیز پر کام کرنا</string>
   <!--EditProfileFragment-->
-  <string name="EditProfileFragment__edit_group_name_and_photo">گروپ کے نام اور تصویر میں ترمیم کریں</string>
+  <string name="EditProfileFragment__edit_group">گروپ میں ترمیم کریں</string>
   <string name="EditProfileFragment__group_name">گروپ کا نام</string>
   <!--EditProfileNameFragment-->
   <string name="EditProfileNameFragment_your_name">آپ کا نام</string>
@@ -1798,10 +1801,8 @@
   <string name="arrays__use_default">پہلے سے طے شدہ استعمال کریں</string>
   <string name="arrays__use_custom">اپنی مرضی سے استعمال کریں</string>
   <string name="arrays__mute_for_one_hour">1 گھنٹے کیلئے خاموش</string>
-  <string name="arrays__mute_for_two_hours">2 گھنٹے کیلئے خاموش</string>
   <string name="arrays__mute_for_one_day">1 دن کیلئے خاموش</string>
   <string name="arrays__mute_for_seven_days">7 دنوں کیلئے خاموش</string>
-  <string name="arrays__mute_for_one_year">1 سال کیلئے خاموش</string>
   <string name="arrays__settings_default">پہلے سے موجود ترتیبات</string>
   <string name="arrays__enabled">فعال ہونا</string>
   <string name="arrays__disabled">معطل ہونا</string>
@@ -1853,6 +1854,7 @@
   <string name="preferences__pref_led_blink_title">LED بلنک پیٹرن</string>
   <string name="preferences__sound">آواز</string>
   <string name="preferences__silent">خاموش</string>
+  <string name="preferences__default">پہلے سے طے شدہ</string>
   <string name="preferences__repeat_alerts">انتباہات دہرائیں</string>
   <string name="preferences__never">کبھی نہیں</string>
   <string name="preferences__one_time">ایک مرتبہ</string>
@@ -1914,7 +1916,6 @@
   <string name="preferences__if_read_receipts_are_disabled_you_wont_be_able_to_see_read_receipts">اگر پڑھنے کی رسیدیں غیر فعال کردی گئی ہیں تو ، آپ دوسروں کی پڑھی ہوئی رسیدیں نہیں دیکھ پائیں گے۔</string>
   <string name="preferences__typing_indicators">ٹائپنگ انڈیکیٹرز</string>
   <string name="preferences__if_typing_indicators_are_disabled_you_wont_be_able_to_see_typing_indicators">اگر ٹائپنگ اندیکیٹرز غیر فعال ہیں، آپ دوسروں سے ٹائپنگ انڈیکیٹرز دیکھنے کے قابل نہیں ہیں۔</string>
-  <string name="preferences__request_keyboard_to_disable_personalized_learning">ذاتی سیکھنے کو غیر فعال کرنے کے لئے کی بورڈ سے درخواست کریں۔ یہ ترتیب ضمانت نہیں ہے ، اور آپ کا کی بورڈ اسے نظرانداز کرسکتا ہے۔</string>
   <string name="preferences_app_protection__blocked_users">مسدود صارفین</string>
   <string name="preferences_chats__when_using_mobile_data">جب موبائل ڈیٹا استعمال کریں</string>
   <string name="preferences_chats__when_using_wifi">جب وائی فائی استعمال کریں</string>
@@ -1993,6 +1994,35 @@
   <string name="preferences_enter_proxy_address">پراکسی ایڈریس درج کریں</string>
   <string name="configurable_single_select__customize_option">آپشن کو کسٹمائز کریں</string>
   <!--Internal only preferences-->
+  <!--Payments-->
+  <string name="PaymentsAllActivityFragment__all">تمام</string>
+  <string name="PaymentsAllActivityFragment__sent">بھیجا گیا</string>
+  <string name="PaymentsAllActivityFragment__received">وصول ہو گیا ہے</string>
+  <string name="PaymentsHomeFragment__see_all">تمام دیکھیں</string>
+  <string name="PaymentsHomeFragment__send">بھیجیں</string>
+  <string name="PaymentsHomeFragment__help">مدد کریں</string>
+  <string name="PaymentsHomeFragment__continue">جاری رکھیں</string>
+  <string name="PaymentsHomeFragment__details">تفصیلات</string>
+  <!--PaymentsAddMoneyFragment-->
+  <string name="PaymentsAddMoneyFragment__copy">کاپی کریں</string>
+  <string name="PaymentsAddMoneyFragment__copied_to_clipboard">کلپ بورڈ کو کاپی کریں</string>
+  <!--PaymentsDetailsFragment-->
+  <string name="PaymentsDetailsFragment__details">تفصیلات</string>
+  <string name="PaymentsDetailsFragment__status">صورتحال</string>
+  <string name="PaymentsDetailsFragment__to">کے لئے</string>
+  <string name="PaymentsDetailsFragment__from">کی طرف سے</string>
+  <!--PaymentsTransferFragment-->
+  <string name="PaymentsTransferFragment__scan_qr_code">QR کوڈ سکین کریں</string>
+  <string name="PaymentsTransferFragment__next">اگلا</string>
+  <string name="PaymentsTransferFragment__settings">ترتیبات</string>
+  <!--PaymentsTransferQrScanFragment-->
+  <!--CreatePaymentFragment-->
+  <string name="CreatePaymentFragment__request">درخواست </string>
+  <!--EditNoteFragment-->
+  <!--ConfirmPaymentFragment-->
+  <string name="ConfirmPayment__to">کے لئے</string>
+  <!--CurrencyAmountFormatter_s_at_s-->
+  <!--SetCurrencyFragment-->
   <!--****************************************-->
   <!--menus-->
   <!--****************************************-->
@@ -2328,6 +2358,7 @@
   <!--DeviceToDeviceTransferService-->
   <!--OldDeviceTransferLockedDialog-->
   <string name="OldDeviceTransferLockedDialog__done">ہو گیا</string>
+  <!--AdvancedPreferenceFragment-->
   <!--RecipientBottomSheet-->
   <string name="RecipientBottomSheet_block">بلاک</string>
   <string name="RecipientBottomSheet_unblock">ان بلاک</string>
@@ -2443,17 +2474,13 @@
   <!--ChatWallpaperActivity-->
   <string name="ChatWallpaperActivity__chat_wallpaper">چیٹ وال پیپر</string>
   <!--ChatWallpaperFragment-->
+  <string name="ChatWallpaperFragment__chat_color">چیٹ کا رنگ</string>
   <string name="ChatWallpaperFragment__set_wallpaper">وال پیپر سیٹ کریں</string>
-  <string name="ChatWallpaperFragment__dark_theme_dims_wallpaper">سیاہ تھیم وال پیپر کو مدھم کرتا ہے</string>
-  <string name="ChatWallpaperFragment__clear_wallpaper">وال پیپر صاف کریں</string>
-  <string name="ChatWallpaperFragment__clear_wallpaper_for_this_chat">اس چیٹ کے لئے وال پیپر صاف کریں؟</string>
-  <string name="ChatWallpaperFragment__clear_wallpaper_this_will_not">وال پیپر صاف کریں؟ اس سے وہ کسٹم وال پیپر صاف نہیں ہوں گے جو آپ نے اپنی چیٹس کے لیئے رکھے ہیں۔</string>
-  <string name="ChatWallpaperFragment__reset_all_wallpapers">تمام وال پیپر کو دوبارہ ترتیب دیں</string>
-  <string name="ChatWallpaperFragment__reset_all_wallpapers_including_custom">آپ نے اپنی چیٹس کیلئے مرتب کردہ کسٹم وال پیپرز سمیت تمام وال پیپرز کو دوبارہ ترتیب دیں۔</string>
   <string name="ChatWallpaperFragment__contact_name">رابطے کا نام</string>
   <string name="ChatWallpaperFragment__reset">دوبارہ بحال کریں</string>
   <string name="ChatWallpaperFragment__clear">صاف</string>
   <string name="ChatWallpaperFragment__wallpaper_preview_description">وال پیپر پیش نظارہ</string>
+  <string name="ChatWallpaperFragment__reset_all_wallpapers">تمام وال پیپر کو دوبارہ ترتیب دیں</string>
   <!--ChatWallpaperSelectionFragment-->
   <string name="ChatWallpaperSelectionFragment__choose_from_photos">فوٹو میں سے انتخاب کریں</string>
   <string name="ChatWallpaperSelectionFragment__presets">پریسیٹس</string>
@@ -2472,5 +2499,70 @@
   <string name="WallpaperCropActivity__set_wallpaper_for_s">%s کے لئے وال پیپر سیٹ کریں۔</string>
   <string name="WallpaperCropActivity__error_setting_wallpaper">وال پیپر کی ترتیب میں خامی۔</string>
   <string name="WallpaperCropActivity__blur_photo">تصویر کو دھندلا کرو</string>
+  <!--InfoCard-->
+  <string name="payment_info_card_hide">پوشیدہ کریں</string>
+  <string name="payment_info_card_update_pin">پن کو اپ ڈیٹ کریں</string>
+  <!--DeactivateWalletFragment-->
+  <!--PaymentsRecoveryStartFragment-->
+  <!--PaymentsRecoveryPasteFragment-->
+  <string name="PaymentsRecoveryPasteFragment__next">اگلا</string>
+  <!--PaymentsRecoveryPhraseFragment-->
+  <string name="PaymentsRecoveryPhraseFragment__next">اگلا</string>
+  <string name="PaymentsRecoveryPhraseFragment__edit">ترتیب دیں</string>
+  <string name="PaymentsRecoveryPhraseFragment__copy">کاپی کریں</string>
+  <!--PaymentsRecoveryPhraseConfirmFragment-->
+  <string name="PaymentRecoveryPhraseConfirmFragment__done">ہو گیا</string>
+  <!--PaymentsRecoveryEntryFragment-->
+  <string name="PaymentsRecoveryEntryFragment__next">اگلا</string>
+  <!--ClearClipboardAlarmReceiver-->
+  <!--PaymentNotificationsView-->
+  <string name="PaymentNotificationsView__view">دیکھیں</string>
+  <!--UnreadPayments-->
+  <!--CanNotSendPaymentDialog-->
+  <string name="CanNotSendPaymentDialog__send_a_message">پیغام بھیجیں</string>
+  <!--GroupsInCommonMessageRequest-->
+  <string name="GroupsInCommonMessageRequest__okay">ٹھیک ہے</string>
+  <!--GroupDescriptionDialog-->
+  <!--QualitySelectorBottomSheetDialog-->
+  <string name="QualitySelectorBottomSheetDialog__high">اونچا</string>
+  <!--AppSettingsFragment-->
+  <!--AccountSettingsFragment-->
+  <!--ChatsSettingsFragment-->
+  <string name="ChatsSettingsFragment__enter_key_sends">بھیجے گئے key داخل کریں</string>
+  <!--SmsSettingsFragment-->
+  <string name="SmsSettingsFragment__use_as_default_sms_app">پہلے سے طے شدہ ایس ایم ایس ایپ استعمال کریں</string>
+  <!--NotificationsSettingsFragment-->
+  <string name="NotificationsSettingsFragment__messages">پیغامات</string>
+  <string name="NotificationsSettingsFragment__calls">کالز</string>
+  <!--PrivacySettingsFragment-->
+  <string name="PrivacySettingsFragment__blocked">بلاک ہوگیا</string>
+  <string name="PrivacySettingsFragment__messaging">پیغام رسانی</string>
+  <string name="PrivacySettingsFragment__disappearing_messages">پیغامات غائب ہو رہے ہیں</string>
+  <string name="PrivacySettingsFragment__block_screenshots_in_the_recents_list_and_inside_the_app">حالیہ فہرست میں سکرین شاٹ بلاک کریں اور ایپ کے اندر</string>
+  <!--AdvancedPrivacySettingsFragment-->
+  <!--ExpireTimerSettingsFragment-->
+  <string name="ExpireTimerSettingsFragment__off">بند کریں</string>
+  <string name="ExpireTimerSettingsFragment__1_week">1 ہفتہ</string>
+  <string name="ExpireTimerSettingsFragment__1_day">1 دن </string>
+  <string name="ExpireTimerSettingsFragment__1_hour">1 گھنٹا</string>
+  <string name="ExpireTimerSettingsFragment__5_minutes">5 منٹس</string>
+  <string name="ExpireTimerSettingsFragment__30_seconds">30 سیکنڈز</string>
+  <string name="ExpireTimerSettingsFragment__set">سیٹ کریں</string>
+  <string name="ExpireTimerSettingsFragment__save">محفوظ کریں</string>
+  <!--HelpSettingsFragment-->
+  <string name="HelpSettingsFragment__contact_us">ہم سے رابطہ کریں</string>
+  <string name="HelpSettingsFragment__version">ورژن</string>
+  <string name="HelpSettingsFragment__debug_log">ڈی بگ لاگ</string>
+  <string name="HelpSettingsFragment__terms_amp_privacy_policy">شرائط &amp;amp:رازداری کی پالیسی</string>
+  <!--DataAndStorageSettingsFragment-->
+  <string name="DataAndStorageSettingsFragment__calls">کالز</string>
+  <!--ChatColorSelectionFragment-->
+  <string name="ChatColorSelectionFragment__chat_color">چیٹ کا رنگ</string>
+  <string name="ChatColorSelectionFragment__edit">ترتیب دیں</string>
+  <string name="ChatColorSelectionFragment__delete">حذف کریں</string>
+  <!--CustomChatColorCreatorFragment-->
+  <!--CustomChatColorCreatorFragmentPage-->
+  <string name="CustomChatColorCreatorFragmentPage__save">محفوظ کریں</string>
+  <!--ChatColorGradientTool-->
   <!--EOF-->
 </resources>

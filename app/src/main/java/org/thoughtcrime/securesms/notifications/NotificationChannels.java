@@ -4,6 +4,7 @@ import android.annotation.TargetApi;
 import android.app.NotificationChannel;
 import android.app.NotificationChannelGroup;
 import android.app.NotificationManager;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
@@ -13,6 +14,7 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -27,6 +29,7 @@ import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.RecipientDatabase;
 import org.thoughtcrime.securesms.database.RecipientDatabase.VibrateState;
+import org.thoughtcrime.securesms.keyvalue.SignalStore;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.ServiceUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
@@ -60,6 +63,7 @@ public class NotificationChannels {
   public static final String LOCKED_STATUS = "locked_status_v2";
   public static final String OTHER         = "other_v3";
   public static final String VOICE_NOTES   = "voice_notes";
+  public static final String JOIN_EVENTS   = "join_events";
 
   /**
    * Ensures all of the notification channels are created. No harm in repeat calls. Call is safely
@@ -155,7 +159,7 @@ public class NotificationChannels {
     if (recipient.getId().isUnknown()) return null;
 
     VibrateState vibrateState     = recipient.getMessageVibrate();
-    boolean      vibrationEnabled = vibrateState == VibrateState.DEFAULT ? TextSecurePreferences.isNotificationVibrateEnabled(context) : vibrateState == VibrateState.ENABLED;
+    boolean      vibrationEnabled = vibrateState == VibrateState.DEFAULT ? SignalStore.settings().isMessageVibrateEnabled() : vibrateState == VibrateState.ENABLED;
     Uri          messageRingtone  = recipient.getMessageRingtone() != null ? recipient.getMessageRingtone() : getMessageRingtone(context);
     String       displayName      = recipient.getDisplayName(context);
 
@@ -177,7 +181,7 @@ public class NotificationChannels {
 
     NotificationChannel channel   = new NotificationChannel(channelId, displayName, NotificationManager.IMPORTANCE_HIGH);
 
-    setLedPreference(channel, TextSecurePreferences.getNotificationLedColor(context));
+    setLedPreference(channel, SignalStore.settings().getMessageLedColor());
     channel.setGroup(CATEGORY_MESSAGES);
     channel.enableVibration(vibrationEnabled);
 
@@ -219,10 +223,15 @@ public class NotificationChannels {
       return;
     }
 
-    Intent intent = new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS);
-    intent.putExtra(Settings.EXTRA_CHANNEL_ID, channelId);
-    intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName());
-    context.startActivity(intent);
+    try {
+      Intent intent = new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS);
+      intent.putExtra(Settings.EXTRA_CHANNEL_ID, channelId);
+      intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName());
+      context.startActivity(intent);
+    } catch (ActivityNotFoundException e) {
+      Log.w(TAG, "Channel settings activity not found", e);
+      Toast.makeText(context, R.string.NotificationChannels__no_activity_available_to_open_notification_channel_settings, Toast.LENGTH_SHORT).show();
+    }
   }
 
   /**
@@ -413,6 +422,16 @@ public class NotificationChannels {
     return group != null && !group.isBlocked();
   }
 
+  public static boolean isCallsChannelValid(@NonNull Context context) {
+    if (!supported()) {
+      return true;
+    }
+
+    NotificationManager notificationManager = ServiceUtil.getNotificationManager(context);
+    NotificationChannel channel             = notificationManager.getNotificationChannel(CALLS);
+
+    return channel != null && channel.getImportance() == NotificationManager.IMPORTANCE_HIGH;
+  }
 
   /**
    * Whether or not notifications for the entire app are enabled.
@@ -492,21 +511,22 @@ public class NotificationChannels {
 
   @TargetApi(26)
   private static void onCreate(@NonNull Context context, @NonNull NotificationManager notificationManager) {
-    NotificationChannelGroup messagesGroup = new NotificationChannelGroup(CATEGORY_MESSAGES, context.getResources().getString(R.string.NotificationChannel_group_messages));
+    NotificationChannelGroup messagesGroup = new NotificationChannelGroup(CATEGORY_MESSAGES, context.getResources().getString(R.string.NotificationChannel_group_chats));
     notificationManager.createNotificationChannelGroup(messagesGroup);
 
-    NotificationChannel messages     = new NotificationChannel(getMessagesChannel(context), context.getString(R.string.NotificationChannel_messages), NotificationManager.IMPORTANCE_HIGH);
+    NotificationChannel messages     = new NotificationChannel(getMessagesChannel(context), context.getString(R.string.NotificationChannel_channel_messages), NotificationManager.IMPORTANCE_HIGH);
     NotificationChannel calls        = new NotificationChannel(CALLS, context.getString(R.string.NotificationChannel_calls), NotificationManager.IMPORTANCE_HIGH);
     NotificationChannel failures     = new NotificationChannel(FAILURES, context.getString(R.string.NotificationChannel_failures), NotificationManager.IMPORTANCE_HIGH);
     NotificationChannel backups      = new NotificationChannel(BACKUPS, context.getString(R.string.NotificationChannel_backups), NotificationManager.IMPORTANCE_LOW);
     NotificationChannel lockedStatus = new NotificationChannel(LOCKED_STATUS, context.getString(R.string.NotificationChannel_locked_status), NotificationManager.IMPORTANCE_LOW);
     NotificationChannel other        = new NotificationChannel(OTHER, context.getString(R.string.NotificationChannel_other), NotificationManager.IMPORTANCE_LOW);
     NotificationChannel voiceNotes   = new NotificationChannel(VOICE_NOTES, context.getString(R.string.NotificationChannel_voice_notes), NotificationManager.IMPORTANCE_LOW);
+    NotificationChannel joinEvents   = new NotificationChannel(JOIN_EVENTS, context.getString(R.string.NotificationChannel_contact_joined_signal), NotificationManager.IMPORTANCE_DEFAULT);
 
     messages.setGroup(CATEGORY_MESSAGES);
-    messages.enableVibration(TextSecurePreferences.isNotificationVibrateEnabled(context));
-    messages.setSound(TextSecurePreferences.getNotificationRingtone(context), getRingtoneAudioAttributes());
-    setLedPreference(messages, TextSecurePreferences.getNotificationLedColor(context));
+    messages.enableVibration(SignalStore.settings().isMessageVibrateEnabled());
+    messages.setSound(SignalStore.settings().getMessageNotificationSound(), getRingtoneAudioAttributes());
+    setLedPreference(messages, SignalStore.settings().getMessageLedColor());
 
     calls.setShowBadge(false);
     backups.setShowBadge(false);
@@ -515,8 +535,9 @@ public class NotificationChannels {
     other.setVibrationPattern(new long[]{0});
     other.enableVibration(true);
     voiceNotes.setShowBadge(false);
+    joinEvents.setShowBadge(false);
 
-    notificationManager.createNotificationChannels(Arrays.asList(messages, calls, failures, backups, lockedStatus, other, voiceNotes));
+    notificationManager.createNotificationChannels(Arrays.asList(messages, calls, failures, backups, lockedStatus, other, voiceNotes, joinEvents));
 
     if (BuildConfig.PLAY_STORE_DISABLED) {
       NotificationChannel appUpdates = new NotificationChannel(APP_UPDATES, context.getString(R.string.NotificationChannel_app_updates), NotificationManager.IMPORTANCE_HIGH);

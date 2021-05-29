@@ -38,6 +38,9 @@
   <string name="ApplicationPreferencesActivity_pin_disabled">PIN Ternonaktifkan.</string>
   <string name="ApplicationPreferencesActivity_hide">Sembunyikan</string>
   <string name="ApplicationPreferencesActivity_hide_reminder">Sembunyikan pengingat?</string>
+  <string name="ApplicationPreferencesActivity_record_payments_recovery_phrase">Rekam frasa pemulihan pembayaran</string>
+  <string name="ApplicationPreferencesActivity_record_phrase">Rekam frasa</string>
+  <string name="ApplicationPreferencesActivity_before_you_can_disable_your_pin">Sebelum Anda dapat menonaktifkan PIN, Anda harus merekam frasa pemulihan pembayaran Anda untuk memastikan Anda dapat memulihkan akun pembayaran Anda.</string>
   <!--AppProtectionPreferenceFragment-->
   <plurals name="AppProtectionPreferenceFragment_minutes">
     <item quantity="other">%dmenit</item>
@@ -56,6 +59,7 @@
   <string name="AttachmentKeyboard_location">Lokasi</string>
   <string name="AttachmentKeyboard_Signal_needs_permission_to_show_your_photos_and_videos">Signal memerlukan izin untuk menampilkan foto dan video Anda.</string>
   <string name="AttachmentKeyboard_give_access">Berikan Akses</string>
+  <string name="AttachmentKeyboard_payment">Pembayaran</string>
   <!--AttachmentManager-->
   <string name="AttachmentManager_cant_open_media_selection">Tidak bisa menemukan aplikasi untuk membuka media yang dipilih.</string>
   <string name="AttachmentManager_signal_requires_the_external_storage_permission_in_order_to_attach_photos_videos_or_audio">Signal memerlukan izin Penyimpanan untuk melampirkan foto, video, atau audio, tetapi saat ini izin ditolak secara permanen. Harap lanjutkan ke menu pengaturan aplikasi, Pilih \"Izin\", dan aktifkan \"Penyimpanan\".</string>
@@ -88,7 +92,6 @@
   <string name="BlockUnblockDialog_unblock_s">Berhenti blok %1$s?</string>
   <string name="BlockUnblockDialog_block">Blokir</string>
   <string name="BlockUnblockDialog_block_and_leave">Blokir dan Tinggalkan</string>
-  <string name="BlockUnblockDialog_block_and_delete">Blok dan Hapus</string>
   <!--BucketedThreadMedia-->
   <string name="BucketedThreadMedia_Today">Hari ini</string>
   <string name="BucketedThreadMedia_Yesterday">Kemarin</string>
@@ -573,8 +576,8 @@
   <string name="ManageGroupActivity_mute_notifications">Senyapkan pemberitahuan</string>
   <string name="ManageGroupActivity_custom_notifications">Notifikasi khusus</string>
   <string name="ManageGroupActivity_mentions">Menyebut</string>
-  <string name="ManageGroupActivity_chat_wallpaper">Gambar latar percakapan</string>
   <string name="ManageGroupActivity_until_s">Sampai %1$s</string>
+  <string name="ManageGroupActivity_always">Selalu</string>
   <string name="ManageGroupActivity_off">Mati</string>
   <string name="ManageGroupActivity_on">Aktif</string>
   <string name="ManageGroupActivity_view_all_members">Lihat semua anggota</string>
@@ -624,6 +627,7 @@
   <string name="ManageRecipientActivity_mute_notifications">Senyapkan pemberitahuan</string>
   <string name="ManageRecipientActivity_custom_notifications">Notifikasi khusus</string>
   <string name="ManageRecipientActivity_until_s">Sampai %1$s</string>
+  <string name="ManageRecipientActivity_always">Selalu</string>
   <string name="ManageRecipientActivity_off">Mati</string>
   <string name="ManageRecipientActivity_on">Aktif</string>
   <string name="ManageRecipientActivity_add_to_a_group">Tambahkan ke grup</string>
@@ -790,6 +794,7 @@
   <string name="NotificationBarManager_signal_call_in_progress">Panggilan Signal berlangsung</string>
   <string name="NotificationBarManager__establishing_signal_call">Menyiapkan panggilan Signal</string>
   <string name="NotificationBarManager__incoming_signal_call">Panggilan masuk Signal</string>
+  <string name="NotificationBarManager__stopping_signal_call_service">Menghentikan layanan panggilan Signal</string>
   <string name="NotificationBarManager__deny_call">Tolak panggilan</string>
   <string name="NotificationBarManager__answer_call">Terima panggilan</string>
   <string name="NotificationBarManager__end_call">Akhiri panggilan</string>
@@ -915,6 +920,7 @@
   <string name="MessageRecord_you_changed_the_group_name_to_s">Anda mengubah nama grup menjadi \"%1$s\".</string>
   <string name="MessageRecord_s_changed_the_group_name_to_s">%1$s mengganti nama grup menjadi \"%2$s\".</string>
   <string name="MessageRecord_the_group_name_has_changed_to_s">Nama grup telah berubah menjadi \"%1$s\".</string>
+  <!--GV2 description change-->
   <!--GV2 avatar change-->
   <string name="MessageRecord_you_changed_the_group_avatar">Anda mengubah avatar grup.</string>
   <string name="MessageRecord_s_changed_the_group_avatar">%1$s mengganti avatar grup.</string>
@@ -1004,6 +1010,7 @@
   <string name="MessageRequestBottomView_do_you_want_to_join_this_group_they_wont_know_youve_seen_their_messages_until_you_accept">Bergabung dengan grup ini dan bagikan nama dan foto Anda dengan anggotanya? Mereka tidak akan mengetahuinya sampai Anda menerimanya.</string>
   <string name="MessageRequestBottomView_join_this_group_they_wont_know_youve_seen_their_messages_until_you_accept">Bergabung kedalam grup? Mereka tidak akan tahu jika kamu telah membaca pesan mereka, sampai kamu menyetujuinya.</string>
   <string name="MessageRequestBottomView_unblock_this_group_and_share_your_name_and_photo_with_its_members">Buka blokir grup ini dan bagikan nama dan foto Anda dengan anggotanya? Anda tidak akan menerima pesan apapun sampai Anda membuka blokirnya.</string>
+  <string name="MessageRequestProfileView_view">Lihat</string>
   <string name="MessageRequestProfileView_member_of_one_group">Anggota dari %1$s</string>
   <string name="MessageRequestProfileView_member_of_two_groups">Anggota dari %1$s dan %2$s</string>
   <string name="MessageRequestProfileView_member_of_many_groups">Anggota dari %1$s, %2$s, dan %3$s</string>
@@ -1040,10 +1047,6 @@
   <string name="DeviceProvisioningActivity_it_looks_like_youre_trying_to_link_a_signal_device_using_a_3rd_party_scanner">Sepertinya Anda mencoba untuk menghubungkan perangkat Signal menggunakan pemindai pihak ke-3. Untuk perlindungan Anda, mohon memindai kode lagi menggunakan Signal.</string>
   <string name="DeviceActivity_signal_needs_the_camera_permission_in_order_to_scan_a_qr_code">Signal memerlukan izin Kamera untuk memindai kode QR, tetapi saat ini izin ditolak secara permanen. Silakan lanjut ke pengaturan aplikasi, pilih \"Izin\" dan aktifkan \"Kamera\".</string>
   <string name="DeviceActivity_unable_to_scan_a_qr_code_without_the_camera_permission">Tidak bisa memindai kode QR tanpa izin Kamera</string>
-  <!--ExpirationDialog-->
-  <string name="ExpirationDialog_disappearing_messages">Penghilangan pesan</string>
-  <string name="ExpirationDialog_your_messages_will_not_expire">Pesan Anda tidak akan kedaluwarsa.</string>
-  <string name="ExpirationDialog_your_messages_will_disappear_s_after_they_have_been_seen">Pesan yang terkirim dan diterima pada percakapan ini akan hilang dalam waktu %s setelah dibaca.</string>
   <!--OutdatedBuildReminder-->
   <string name="OutdatedBuildReminder_update_now">Perbarui sekarang</string>
   <string name="OutdatedBuildReminder_your_version_of_signal_will_expire_today">Versi applikasi Signal ini akan kedaluarsa hari ini. Segera perbarui ke versi yang terbaru.</string>
@@ -1099,6 +1102,7 @@
   <string name="ReactionsConversationView_plus">+%1$d</string>
   <!--ReactionsRecipientAdapter-->
   <string name="ReactionsRecipientAdapter_you">Anda</string>
+  <!--RecaptchaRequiredBottomSheetFragment-->
   <!--RecipientPreferencesActivity-->
   <string name="RecipientPreferenceActivity_block">Blokir</string>
   <string name="RecipientPreferenceActivity_unblock">Buka blokir</string>
@@ -1149,12 +1153,14 @@
   <string name="CallParticipantView__cant_receive_audio_video_from_s">Tidak dapat menerima audio &amp; video dari %1$s</string>
   <string name="CallParticipantView__cant_receive_audio_and_video_from_s">Tidak dapat menerima audio dan video dari %1$s</string>
   <string name="CallParticipantView__this_may_be_Because_they_have_not_verified_your_safety_number_change">Ini mungkin terjadi karena mereka belum memverifikasi pergantian nomor keamanan, ada masalah dengan perangkat, atau mereka memblokir Anda.</string>
+  <!--CallToastPopupWindow-->
   <!--ProxyBottomSheetFragment-->
   <string name="ProxyBottomSheetFragment_proxy_server">Peladen proksi</string>
   <string name="ProxyBottomSheetFragment_proxy_address">Alamat proksi</string>
   <string name="ProxyBottomSheetFragment_do_you_want_to_use_this_proxy_address">Apakah Anda ingin menggunakan alamat proksi ini?</string>
   <string name="ProxyBottomSheetFragment_use_proxy">Gunakan proksi</string>
   <string name="ProxyBottomSheetFragment_successfully_connected_to_proxy">Berhasil tersambung ke proksi.</string>
+  <!--RecaptchaProofActivity-->
   <!--RegistrationActivity-->
   <string name="RegistrationActivity_select_your_country">Pilih negara Anda</string>
   <string name="RegistrationActivity_you_must_specify_your_country_code">Anda harus mengisi
@@ -1406,16 +1412,17 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
   <string name="MessageNotifier_this_message_was_deleted">Pesan ini telah dihapus.</string>
   <string name="TurnOffContactJoinedNotificationsActivity__turn_off_contact_joined_signal">Matikan notifikasi kontak bergabung Signal? Anda dapat menyalakannya kembali di Signal &gt; Pengaturan &gt; Notifikasi.</string>
   <!--Notification Channels-->
-  <string name="NotificationChannel_messages">Standar</string>
+  <string name="NotificationChannel_channel_messages">Pesan</string>
   <string name="NotificationChannel_calls">Panggilan</string>
   <string name="NotificationChannel_failures">Gagal</string>
   <string name="NotificationChannel_backups">Cadangan</string>
   <string name="NotificationChannel_locked_status">Status penguncian</string>
   <string name="NotificationChannel_app_updates">Pembaruan aplikasi</string>
   <string name="NotificationChannel_other">Lainnya</string>
-  <string name="NotificationChannel_group_messages">Pesan</string>
+  <string name="NotificationChannel_group_chats">Percakapan</string>
   <string name="NotificationChannel_missing_display_name">Tidak dikenal</string>
   <string name="NotificationChannel_voice_notes">Pesan suara</string>
+  <string name="NotificationChannel_contact_joined_signal">Kontak bergabung dengan Signal</string>
   <!--ProfileEditNameFragment-->
   <!--QuickResponseService-->
   <string name="QuickResponseService_quick_response_unavailable_when_Signal_is_locked">Tanggapan cepat tidak tersedia ketika Signal sedang dikunci!</string>
@@ -1431,6 +1438,8 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
   <!--SingleRecipientNotificationBuilder-->
   <string name="SingleRecipientNotificationBuilder_signal">Signal</string>
   <string name="SingleRecipientNotificationBuilder_new_message">Pesan baru</string>
+  <string name="SingleRecipientNotificationBuilder_message_request">Permintaan pesan</string>
+  <string name="SingleRecipientNotificationBuilder_you">Anda</string>
   <!--ThumbnailView-->
   <string name="ThumbnailView_Play_video_description">Putar video</string>
   <string name="ThumbnailView_Has_a_caption_description">Memiliki keterangan</string>
@@ -1533,6 +1542,10 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
   <string name="ConversationUpdateItem_return_to_call">Kembali ke panggilan</string>
   <string name="ConversationUpdateItem_call_is_full">Panggilan penuh</string>
   <string name="ConversationUpdateItem_invite_friends">Undang teman</string>
+  <string name="ConversationUpdateItem_enable_call_notifications">Aktifkan Notifikasi Panggilan</string>
+  <string name="ConversationUpdateItem_no_groups_in_common_review_requests_carefully">Tidak ada grup yang sama. Periksa permintaan secara hati-hati.</string>
+  <string name="ConversationUpdateItem_no_contacts_in_this_group_review_requests_carefully">Tidak ada kontak di grup ini. Periksa permintaan secara hati-hati.</string>
+  <string name="ConversationUpdateItem_view">Lihat</string>
   <!--audio_view-->
   <string name="audio_view__play_pause_accessibility_description">Putar … Jeda</string>
   <string name="audio_view__download_accessibility_description">Unduh</string>
@@ -1556,6 +1569,11 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
   <string name="safety_number_change_dialog__the_following_people_may_have_reinstalled_or_changed_devices">Orang-orang berikut mungkin telah memasang ulang atau mengganti perangkat. Verifikasi nomor keamanan Anda dengan mereka untuk memastikan privasi.</string>
   <string name="safety_number_change_dialog__view">Lihat</string>
   <string name="safety_number_change_dialog__previous_verified">Diverifikasi sebelumnya</string>
+  <!--EnableCallNotificationSettingsDialog__call_notifications_checklist-->
+  <string name="EnableCallNotificationSettingsDialog__call_notifications_enabled">Notifikasi panggilan diaktifkan.</string>
+  <string name="EnableCallNotificationSettingsDialog__enable_call_notifications">Aktifkan notifikasi panggilan</string>
+  <string name="EnableCallNotificationSettingsDialog__to_receive_call_notifications_tap_here_and_turn_on_show_notifications">Untuk menerima notifikasi panggilan, ketuk di sini dan nyalakan \"Tampilkan notifikasi.\"</string>
+  <string name="EnableCallNotificationSettingsDialog__settings">Pengaturan</string>
   <!--country_selection_fragment-->
   <string name="country_selection_fragment__loading_countries">Memuat daftar negara…</string>
   <string name="country_selection_fragment__search">Cari</string>
@@ -1604,7 +1622,6 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
     <item quantity="other">%d yang lain</item>
   </plurals>
   <!--giphy_activity-->
-  <string name="giphy_activity_toolbar__search_gifs_and_stickers">Cari GIF dan stiker</string>
   <!--giphy_fragment-->
   <string name="giphy_fragment__nothing_found">Tidak ada yang ditemukan</string>
   <!--log_submit_activity-->
@@ -1653,7 +1670,7 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
   <string name="EditAboutFragment_taking_a_break">Istirahat</string>
   <string name="EditAboutFragment_working_on_something_new">Sedang mengerjakan sesuatu yang baru</string>
   <!--EditProfileFragment-->
-  <string name="EditProfileFragment__edit_group_name_and_photo">Ubah nama grup dan foto</string>
+  <string name="EditProfileFragment__edit_group">Ubah grup</string>
   <string name="EditProfileFragment__group_name">Nama grup</string>
   <!--EditProfileNameFragment-->
   <string name="EditProfileNameFragment_your_name">Nama anda</string>
@@ -1736,10 +1753,9 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
   <string name="arrays__use_default">Gunakan standar</string>
   <string name="arrays__use_custom">Gunakan pilihan khusus</string>
   <string name="arrays__mute_for_one_hour">Senyapkan selama 1 jam</string>
-  <string name="arrays__mute_for_two_hours">Senyapkan selama 2 jam</string>
   <string name="arrays__mute_for_one_day">Senyapkan selama 1 hari</string>
   <string name="arrays__mute_for_seven_days">Senyapkan selama 7 hari</string>
-  <string name="arrays__mute_for_one_year">Senyapkan selama 1 tahun</string>
+  <string name="arrays__always">Selalu</string>
   <string name="arrays__settings_default">Pengaturan standar</string>
   <string name="arrays__enabled">Aktif</string>
   <string name="arrays__disabled">Nonaktif</string>
@@ -1790,6 +1806,7 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
   <string name="preferences__pref_led_blink_title">Pola kedip LED</string>
   <string name="preferences__sound">Bunyi</string>
   <string name="preferences__silent">Diam</string>
+  <string name="preferences__default">Standar</string>
   <string name="preferences__repeat_alerts">Ulangi peringatan</string>
   <string name="preferences__never">Tidak pernah</string>
   <string name="preferences__one_time">Sekali saja</string>
@@ -1851,7 +1868,6 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
   <string name="preferences__if_read_receipts_are_disabled_you_wont_be_able_to_see_read_receipts">Jika bukti pesan terbaca dinonaktifkan, Anda tidak dapat melihat bukti pesan terbaca dari orang lain</string>
   <string name="preferences__typing_indicators">Indikator pengetikan</string>
   <string name="preferences__if_typing_indicators_are_disabled_you_wont_be_able_to_see_typing_indicators">Jika indikator pengetikan dinonaktifkan, Anda tidak akan mampu melihat indikator pengetikan dari orang lainnya.</string>
-  <string name="preferences__request_keyboard_to_disable_personalized_learning">Minta papan ketik untuk menonaktifkan personalisasi. Pengaturan ini bukan garansi, dan papan ketik Anda mungkin menolaknya.</string>
   <string name="preferences_app_protection__blocked_users">Pengguna diblokir</string>
   <string name="preferences_chats__when_using_mobile_data">Ketika menggunakan data seluler</string>
   <string name="preferences_chats__when_using_wifi">Ketika menggunakan Wi-Fi</string>
@@ -1930,6 +1946,35 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
   <string name="preferences_enter_proxy_address">Masukkan alamat proksi</string>
   <string name="configurable_single_select__customize_option">Sesuaikan opsi</string>
   <!--Internal only preferences-->
+  <!--Payments-->
+  <string name="PaymentsAllActivityFragment__all">Semua</string>
+  <string name="PaymentsAllActivityFragment__sent">Terkirim</string>
+  <string name="PaymentsAllActivityFragment__received">Diterima</string>
+  <string name="PaymentsHomeFragment__see_all">Lihat semua</string>
+  <string name="PaymentsHomeFragment__send">Kirim</string>
+  <string name="PaymentsHomeFragment__help">Bantuan</string>
+  <string name="PaymentsHomeFragment__continue">Lanjut</string>
+  <string name="PaymentsHomeFragment__details">Detail</string>
+  <!--PaymentsAddMoneyFragment-->
+  <string name="PaymentsAddMoneyFragment__copy">Salin</string>
+  <string name="PaymentsAddMoneyFragment__copied_to_clipboard">Disalin ke papan klip</string>
+  <!--PaymentsDetailsFragment-->
+  <string name="PaymentsDetailsFragment__details">Detail</string>
+  <string name="PaymentsDetailsFragment__status">Status</string>
+  <string name="PaymentsDetailsFragment__to">Kepada</string>
+  <string name="PaymentsDetailsFragment__from">Dari</string>
+  <!--PaymentsTransferFragment-->
+  <string name="PaymentsTransferFragment__scan_qr_code">Pindai kode QR</string>
+  <string name="PaymentsTransferFragment__next">Berikutnya</string>
+  <string name="PaymentsTransferFragment__settings">Pengaturan</string>
+  <!--PaymentsTransferQrScanFragment-->
+  <!--CreatePaymentFragment-->
+  <string name="CreatePaymentFragment__request">Permintaan</string>
+  <!--EditNoteFragment-->
+  <!--ConfirmPaymentFragment-->
+  <string name="ConfirmPayment__to">Kepada</string>
+  <!--CurrencyAmountFormatter_s_at_s-->
+  <!--SetCurrencyFragment-->
   <!--****************************************-->
   <!--menus-->
   <!--****************************************-->
@@ -2258,6 +2303,7 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
   <!--DeviceToDeviceTransferService-->
   <!--OldDeviceTransferLockedDialog-->
   <string name="OldDeviceTransferLockedDialog__done">Selesai</string>
+  <!--AdvancedPreferenceFragment-->
   <!--RecipientBottomSheet-->
   <string name="RecipientBottomSheet_block">Blokir</string>
   <string name="RecipientBottomSheet_unblock">Buka blokir</string>
@@ -2373,17 +2419,13 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
   <!--ChatWallpaperActivity-->
   <string name="ChatWallpaperActivity__chat_wallpaper">Gambar latar percakapan</string>
   <!--ChatWallpaperFragment-->
+  <string name="ChatWallpaperFragment__chat_color">Warna percakapan</string>
   <string name="ChatWallpaperFragment__set_wallpaper">Atur gambar latar</string>
-  <string name="ChatWallpaperFragment__dark_theme_dims_wallpaper">Tema gelap meredupkan gambar latar</string>
-  <string name="ChatWallpaperFragment__clear_wallpaper">Hapus gambar latar</string>
-  <string name="ChatWallpaperFragment__clear_wallpaper_for_this_chat">Hapus gambar latar percakapan ini?</string>
-  <string name="ChatWallpaperFragment__clear_wallpaper_this_will_not">Hapus gambar latar? Anda akan menghapus gambar latar semua percakapan.</string>
-  <string name="ChatWallpaperFragment__reset_all_wallpapers">Kembalikan semua gambar latar.</string>
-  <string name="ChatWallpaperFragment__reset_all_wallpapers_including_custom">Kembalikan semua gambar latar, termasuk gambar untuk percakapan?</string>
   <string name="ChatWallpaperFragment__contact_name">Nama kontak</string>
   <string name="ChatWallpaperFragment__reset">Atur ulang</string>
   <string name="ChatWallpaperFragment__clear">Bersihkan</string>
   <string name="ChatWallpaperFragment__wallpaper_preview_description">Pratinjau gambar latar</string>
+  <string name="ChatWallpaperFragment__reset_all_wallpapers">Kembalikan semua gambar latar.</string>
   <!--ChatWallpaperSelectionFragment-->
   <string name="ChatWallpaperSelectionFragment__choose_from_photos">Pilih dari galeri</string>
   <string name="ChatWallpaperSelectionFragment__presets">Preset</string>
@@ -2402,5 +2444,72 @@ Menerima pesan pertukaran kunci untuk versi protokol yang tidak valid.
   <string name="WallpaperCropActivity__set_wallpaper_for_s">Atur gambar latar untuk %s.</string>
   <string name="WallpaperCropActivity__error_setting_wallpaper">Gagal mengatur gambar latar.</string>
   <string name="WallpaperCropActivity__blur_photo">Buramkan foto</string>
+  <!--InfoCard-->
+  <string name="payment_info_card_hide">Sembunyikan</string>
+  <string name="payment_info_card_update_pin">Perbarui PIN</string>
+  <!--DeactivateWalletFragment-->
+  <!--PaymentsRecoveryStartFragment-->
+  <!--PaymentsRecoveryPasteFragment-->
+  <string name="PaymentsRecoveryPasteFragment__next">Berikutnya</string>
+  <!--PaymentsRecoveryPhraseFragment-->
+  <string name="PaymentsRecoveryPhraseFragment__next">Berikutnya</string>
+  <string name="PaymentsRecoveryPhraseFragment__edit">Sunting</string>
+  <string name="PaymentsRecoveryPhraseFragment__copy">Salin</string>
+  <!--PaymentsRecoveryPhraseConfirmFragment-->
+  <string name="PaymentRecoveryPhraseConfirmFragment__done">Selesai</string>
+  <!--PaymentsRecoveryEntryFragment-->
+  <string name="PaymentsRecoveryEntryFragment__next">Berikutnya</string>
+  <!--ClearClipboardAlarmReceiver-->
+  <!--PaymentNotificationsView-->
+  <string name="PaymentNotificationsView__view">Lihat</string>
+  <!--UnreadPayments-->
+  <!--CanNotSendPaymentDialog-->
+  <string name="CanNotSendPaymentDialog__send_a_message">Kirim sebuah pesan</string>
+  <!--GroupsInCommonMessageRequest-->
+  <string name="GroupsInCommonMessageRequest__okay">Oke</string>
+  <!--GroupDescriptionDialog-->
+  <!--QualitySelectorBottomSheetDialog-->
+  <string name="QualitySelectorBottomSheetDialog__high">Tinggi</string>
+  <!--AppSettingsFragment-->
+  <!--AccountSettingsFragment-->
+  <!--ChatsSettingsFragment-->
+  <string name="ChatsSettingsFragment__enter_key_sends">Enter untuk mengirim</string>
+  <!--SmsSettingsFragment-->
+  <string name="SmsSettingsFragment__use_as_default_sms_app">Gunakan sebagai aplikasi SMS utama</string>
+  <!--NotificationsSettingsFragment-->
+  <string name="NotificationsSettingsFragment__messages">Pesan</string>
+  <string name="NotificationsSettingsFragment__calls">Panggilan</string>
+  <!--PrivacySettingsFragment-->
+  <string name="PrivacySettingsFragment__blocked">Terblokir</string>
+  <string name="PrivacySettingsFragment__messaging">Olah pesan</string>
+  <string name="PrivacySettingsFragment__disappearing_messages">Penghilangan pesan</string>
+  <string name="PrivacySettingsFragment__block_screenshots_in_the_recents_list_and_inside_the_app">Blokir tangkapan layar di daftar terbaru dan di dalam aplikasi</string>
+  <!--AdvancedPrivacySettingsFragment-->
+  <!--ExpireTimerSettingsFragment-->
+  <string name="ExpireTimerSettingsFragment__off">Mati</string>
+  <string name="ExpireTimerSettingsFragment__1_week">1 minggu</string>
+  <string name="ExpireTimerSettingsFragment__1_day">1 hari</string>
+  <string name="ExpireTimerSettingsFragment__1_hour">1 jam</string>
+  <string name="ExpireTimerSettingsFragment__5_minutes">5 menit</string>
+  <string name="ExpireTimerSettingsFragment__30_seconds">30 detik</string>
+  <string name="ExpireTimerSettingsFragment__set">Atur</string>
+  <string name="ExpireTimerSettingsFragment__save">Simpan</string>
+  <string name="CustomExpireTimerSelectorView__minutes">menit</string>
+  <string name="CustomExpireTimerSelectorView__hours">jam</string>
+  <!--HelpSettingsFragment-->
+  <string name="HelpSettingsFragment__contact_us">Hubungi kami</string>
+  <string name="HelpSettingsFragment__version">Versi</string>
+  <string name="HelpSettingsFragment__debug_log">Catatan Awakutu</string>
+  <string name="HelpSettingsFragment__terms_amp_privacy_policy">Istilah &amp; Kebijakan Privasi</string>
+  <!--DataAndStorageSettingsFragment-->
+  <string name="DataAndStorageSettingsFragment__calls">Panggilan</string>
+  <!--ChatColorSelectionFragment-->
+  <string name="ChatColorSelectionFragment__chat_color">Warna percakapan</string>
+  <string name="ChatColorSelectionFragment__edit">Sunting</string>
+  <string name="ChatColorSelectionFragment__delete">Hapus</string>
+  <!--CustomChatColorCreatorFragment-->
+  <!--CustomChatColorCreatorFragmentPage-->
+  <string name="CustomChatColorCreatorFragmentPage__save">Simpan</string>
+  <!--ChatColorGradientTool-->
   <!--EOF-->
 </resources>

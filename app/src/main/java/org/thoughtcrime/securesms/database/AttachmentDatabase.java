@@ -52,6 +52,7 @@ import org.thoughtcrime.securesms.database.model.databaseprotos.AudioWaveFormDat
 import org.thoughtcrime.securesms.mms.MediaStream;
 import org.thoughtcrime.securesms.mms.MmsException;
 import org.thoughtcrime.securesms.mms.PartAuthority;
+import org.thoughtcrime.securesms.mms.SentMediaQuality;
 import org.thoughtcrime.securesms.stickers.StickerLocator;
 import org.thoughtcrime.securesms.util.Base64;
 import org.thoughtcrime.securesms.util.CursorUtil;
@@ -83,7 +84,7 @@ import java.util.Set;
 
 public class AttachmentDatabase extends Database {
   
-  private static final String TAG = AttachmentDatabase.class.getSimpleName();
+  private static final String TAG = Log.tag(AttachmentDatabase.class);
 
   public  static final String TABLE_NAME             = "part";
   public  static final String ROW_ID                 = "_id";
@@ -102,6 +103,7 @@ public class AttachmentDatabase extends Database {
           static final String DIGEST                 = "digest";
           static final String VOICE_NOTE             = "voice_note";
           static final String BORDERLESS             = "borderless";
+          static final String VIDEO_GIF              = "video_gif";
           static final String QUOTE                  = "quote";
   public  static final String STICKER_PACK_ID        = "sticker_pack_id";
   public  static final String STICKER_PACK_KEY       = "sticker_pack_key";
@@ -135,7 +137,7 @@ public class AttachmentDatabase extends Database {
                                                            MMS_ID, CONTENT_TYPE, NAME, CONTENT_DISPOSITION,
                                                            CDN_NUMBER, CONTENT_LOCATION, DATA,
                                                            TRANSFER_STATE, SIZE, FILE_NAME, UNIQUE_ID, DIGEST,
-                                                           FAST_PREFLIGHT_ID, VOICE_NOTE, BORDERLESS, QUOTE, DATA_RANDOM,
+                                                           FAST_PREFLIGHT_ID, VOICE_NOTE, BORDERLESS, VIDEO_GIF, QUOTE, DATA_RANDOM,
                                                            WIDTH, HEIGHT, CAPTION, STICKER_PACK_ID,
                                                            STICKER_PACK_KEY, STICKER_ID, STICKER_EMOJI, DATA_HASH, VISUAL_HASH,
                                                            TRANSFORM_PROPERTIES, TRANSFER_FILE, DISPLAY_ORDER,
@@ -163,6 +165,7 @@ public class AttachmentDatabase extends Database {
                                                                                   FAST_PREFLIGHT_ID      + " TEXT, " +
                                                                                   VOICE_NOTE             + " INTEGER DEFAULT 0, " +
                                                                                   BORDERLESS             + " INTEGER DEFAULT 0, " +
+                                                                                  VIDEO_GIF              + " INTEGER DEFAULT 0, " +
                                                                                   DATA_RANDOM            + " BLOB, " +
                                                                                   QUOTE                  + " INTEGER DEFAULT 0, " +
                                                                                   WIDTH                  + " INTEGER DEFAULT 0, " +
@@ -1144,6 +1147,7 @@ public class AttachmentDatabase extends Database {
                                               object.getString(FAST_PREFLIGHT_ID),
                                               object.getInt(VOICE_NOTE) == 1,
                                               object.getInt(BORDERLESS) == 1,
+                                              object.getInt(VIDEO_GIF) == 1,
                                               object.getInt(WIDTH),
                                               object.getInt(HEIGHT),
                                               object.getInt(QUOTE) == 1,
@@ -1182,6 +1186,7 @@ public class AttachmentDatabase extends Database {
                                                                 cursor.getString(cursor.getColumnIndexOrThrow(FAST_PREFLIGHT_ID)),
                                                                 cursor.getInt(cursor.getColumnIndexOrThrow(VOICE_NOTE)) == 1,
                                                                 cursor.getInt(cursor.getColumnIndexOrThrow(BORDERLESS)) == 1,
+                                                                cursor.getInt(cursor.getColumnIndexOrThrow(VIDEO_GIF)) == 1,
                                                                 cursor.getInt(cursor.getColumnIndexOrThrow(WIDTH)),
                                                                 cursor.getInt(cursor.getColumnIndexOrThrow(HEIGHT)),
                                                                 cursor.getInt(cursor.getColumnIndexOrThrow(QUOTE)) == 1,
@@ -1250,6 +1255,7 @@ public class AttachmentDatabase extends Database {
       contentValues.put(FAST_PREFLIGHT_ID, attachment.getFastPreflightId());
       contentValues.put(VOICE_NOTE, attachment.isVoiceNote() ? 1 : 0);
       contentValues.put(BORDERLESS, attachment.isBorderless() ? 1 : 0);
+      contentValues.put(VIDEO_GIF, attachment.isVideoGif() ? 1 : 0);
       contentValues.put(WIDTH, template.getWidth());
       contentValues.put(HEIGHT, template.getHeight());
       contentValues.put(QUOTE, quote);
@@ -1388,33 +1394,43 @@ public class AttachmentDatabase extends Database {
 
   public static final class TransformProperties {
 
+    private static final int DEFAULT_MEDIA_QUALITY = SentMediaQuality.STANDARD.getCode();
+
     @JsonProperty private final boolean skipTransform;
     @JsonProperty private final boolean videoTrim;
     @JsonProperty private final long    videoTrimStartTimeUs;
     @JsonProperty private final long    videoTrimEndTimeUs;
+    @JsonProperty private final int     sentMediaQuality;
 
     @JsonCreator
     public TransformProperties(@JsonProperty("skipTransform") boolean skipTransform,
                                @JsonProperty("videoTrim") boolean videoTrim,
                                @JsonProperty("videoTrimStartTimeUs") long videoTrimStartTimeUs,
-                               @JsonProperty("videoTrimEndTimeUs") long videoTrimEndTimeUs)
+                               @JsonProperty("videoTrimEndTimeUs") long videoTrimEndTimeUs,
+                               @JsonProperty("sentMediaQuality") int sentMediaQuality)
     {
       this.skipTransform        = skipTransform;
       this.videoTrim            = videoTrim;
       this.videoTrimStartTimeUs = videoTrimStartTimeUs;
       this.videoTrimEndTimeUs   = videoTrimEndTimeUs;
+      this.sentMediaQuality     = sentMediaQuality;
     }
 
     public static @NonNull TransformProperties empty() {
-      return new TransformProperties(false, false, 0, 0);
+      return new TransformProperties(false, false, 0, 0, DEFAULT_MEDIA_QUALITY);
     }
 
     public static @NonNull TransformProperties forSkipTransform() {
-      return new TransformProperties(true, false, 0, 0);
+      return new TransformProperties(true, false, 0, 0, DEFAULT_MEDIA_QUALITY);
     }
 
     public static @NonNull TransformProperties forVideoTrim(long videoTrimStartTimeUs, long videoTrimEndTimeUs) {
-      return new TransformProperties(false, true, videoTrimStartTimeUs, videoTrimEndTimeUs);
+      return new TransformProperties(false, true, videoTrimStartTimeUs, videoTrimEndTimeUs, DEFAULT_MEDIA_QUALITY);
+    }
+
+    public static @NonNull TransformProperties forSentMediaQuality(@NonNull Optional<TransformProperties> currentProperties, @NonNull SentMediaQuality sentMediaQuality) {
+      TransformProperties existing = currentProperties.or(empty());
+      return new TransformProperties(existing.skipTransform, existing.videoTrim, existing.videoTrimStartTimeUs, existing.videoTrimEndTimeUs, sentMediaQuality.getCode());
     }
 
     public boolean shouldSkipTransform() {
@@ -1435,6 +1451,10 @@ public class AttachmentDatabase extends Database {
 
     public long getVideoTrimEndTimeUs() {
       return videoTrimEndTimeUs;
+    }
+
+    public int getSentMediaQuality() {
+      return sentMediaQuality;
     }
 
     @NonNull String serialize() {
